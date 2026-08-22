@@ -528,10 +528,10 @@ function _secNum(s) {
 
 // ===== 属性过滤器（树状分支：单一顶层"科技"，下挂国际/中国/AI 三个一级分支）=====
 // 顶层 3 个一级分类：中国 / 国际 / 科技
-// 国际 = 路透社；科技 = 全部 AI / 论文 / 榜单 / 开源 / 评测源
-// ===== 属性过滤器（2026-08-22：用户要求"全部新闻收集"——中国 + 国际(路透社) + 科技 全部展示）=====
+// 国际 = 路透社；科技 = 全部 AI 实验室 + HF Daily Papers + 开源 + 政策/学术
+// ===== 属性过滤器（2026-08-22 用户全量收集版）=====
 const FILTER_GROUPS = [
-  // ===== 中国（当前展示）=====
+  // ===== 中国 =====
   {
     key: "cn", label: "中国",
     root: { label: "中国", match: ["people_daily","gov_policy","miit","cac","ndrc","cast","ia_cas","pku_ai","tsinghua_ai","baai","caai","cctv"] },
@@ -567,23 +567,12 @@ const FILTER_GROUPS = [
       { label: "路透社", match: ["reuters"] },
     ],
   },
-  // ===== 科技（全部分类，2026-08-22 起默认展示）=====
+  // ===== 科技（2026-08-22：arXiv + 模型榜单去除，论文改为 HF Daily Papers）=====
   {
     key: "tech", label: "科技",
-    root: { label: "科技", match: ["arxiv_cv","arxiv_cl","arxiv_lg","hf_models","hf_papers","artificial_analysis","openai_news","openai_research","anthropic","deepmind","google_research","meta_ai","ms_ai","nvidia_ai","mit_tech_review","github_trending","hf_blog"] },
+    root: { label: "科技", match: ["hf_papers","openai_news","openai_research","anthropic","deepmind","google_research","meta_ai","ms_ai","nvidia_ai","mit_tech_review","github_trending","hf_blog"] },
     branches: [
-      { label: "论文 · arXiv", match: ["arxiv_cv","arxiv_cl","arxiv_lg"],
-        leaves: [
-          { label: "arXiv cs.CV", match: ["arxiv_cv"] },
-          { label: "arXiv cs.CL", match: ["arxiv_cl"] },
-          { label: "arXiv cs.LG", match: ["arxiv_lg"] },
-        ]},
-{ label: "模型 · 榜单", match: ["hf_models","hf_papers","artificial_analysis"],
-      leaves: [
-        { label: "HF Models", match: ["hf_models"] },
-        { label: "HF Papers", match: ["hf_papers"] },
-        { label: "Artificial Analysis", match: ["artificial_analysis"] },
-      ]},
+      { label: "论文 · HF Daily Papers", match: ["hf_papers"] },
       { label: "AI 研究", match: ["openai_news","openai_research","anthropic","deepmind","google_research","meta_ai","ms_ai","nvidia_ai","mit_tech_review","github_trending","hf_blog"],
         leaves: [
           { label: "OpenAI", match: ["openai_news","openai_research"] },
@@ -599,11 +588,10 @@ const FILTER_GROUPS = [
     ],
   },
 ];
-// 真实爬虫源 id（用于从 SOURCE_HOMES 中区分出「目录源」放到源站导航）
+// 真实爬虫源 id
 const REAL_SOURCE_IDS = ["reuters", "people_daily", "mit_tech_review", "openai_news",
   "openai_research", "anthropic", "deepmind", "google_research", "meta_ai", "ms_ai",
-  "nvidia_ai", "hf_blog", "arxiv_lg", "arxiv_cl", "arxiv_cv", "hf_papers",
-  "github_trending", "hf_models", "artificial_analysis",
+  "nvidia_ai", "hf_blog", "hf_papers", "github_trending",
   "gov_policy", "miit", "cac", "ndrc", "cast", "ia_cas", "pku_ai", "tsinghua_ai",
   "baai", "caai", "cctv"];
 
@@ -1041,7 +1029,7 @@ def build_static(output_path: str) -> int:
 # ---------------------------------------------------------------- 简易版（3 块精要，独立 docs/simple.html）
 
 # 简易版 6 大品牌源 ID 集合（ChatGPT/Gemini/Anthropic/智谱/DeepSeek/千问）
-SIMPLE_TECH_IDS = {"openai_news", "openai_research", "deepmind", "anthropic",
+SIMPLE_TECH_IDS = {"hf_papers", "openai_news", "openai_research", "deepmind", "anthropic",
                    "zhipu", "deepseek", "qwen"}
 
 # 简易版模板（静态 HTML，无 JS、无 SSE；数据在构建时直接渲染为 HTML）

@@ -5,9 +5,7 @@ from scrapers.base import BaseScraper, SourceConfig
 from scrapers.cn_sources import CnSourceScraper
 from scrapers.feed_scraper import FeedScraper
 from scrapers.github_trending import GitHubTrendingScraper
-from scrapers.hf_models import HfModelsScraper
 from scrapers.html_scraper import HtmlScraper
-from scrapers.leaderboards import LeaderboardScraper
 from scrapers.people_daily import PeopleDailyScraper
 from scrapers.reuters_sitemap import ReutersSitemapScraper
 
@@ -23,10 +21,6 @@ def build_scraper(source: SourceConfig, http) -> BaseScraper:
         return PeopleDailyScraper(source, http)
     if t == "github":
         return GitHubTrendingScraper(source, http)
-    if t == "hf_models":
-        return HfModelsScraper(source, http)
-    if t == "leaderboard":
-        return LeaderboardScraper(source, http)
     if t == "reuters_sitemap":
         return ReutersSitemapScraper(source, http)
     if t == "cn_source":
@@ -42,8 +36,6 @@ __all__ = [
     "HtmlScraper",
     "PeopleDailyScraper",
     "GitHubTrendingScraper",
-    "HfModelsScraper",
-    "LeaderboardScraper",
     "ReutersSitemapScraper",
     "CnSourceScraper",
 ]

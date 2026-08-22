@@ -184,46 +184,17 @@ SOURCES: list[SourceConfig] = [
         feed_url="https://huggingface.co/blog/feed.xml",
         limit=15,
     ),
-    # === 科技 · AI > 学术论文 ===
-    SourceConfig(
-        id="arxiv_lg",
-        name="arXiv cs.LG",
-        category="ai",
-        subcategory="papers",
-        url="https://arxiv.org/list/cs.LG/recent",
-        scraper_type="feed",
-        feed_url="http://export.arxiv.org/api/query?search_query=cat:cs.LG&sortBy=submittedDate&sortOrder=descending&max_results=20",
-        limit=20,
-    ),
-    SourceConfig(
-        id="arxiv_cl",
-        name="arXiv cs.CL",
-        category="ai",
-        subcategory="papers",
-        url="https://arxiv.org/list/cs.CL/recent",
-        scraper_type="feed",
-        feed_url="http://export.arxiv.org/api/query?search_query=cat:cs.CL&sortBy=submittedDate&sortOrder=descending&max_results=20",
-        limit=20,
-    ),
-    SourceConfig(
-        id="arxiv_cv",
-        name="arXiv cs.CV",
-        category="ai",
-        subcategory="papers",
-        url="https://arxiv.org/list/cs.CV/recent",
-        scraper_type="feed",
-        feed_url="http://export.arxiv.org/api/query?search_query=cat:cs.CV&sortBy=submittedDate&sortOrder=descending&max_results=20",
-        limit=20,
-    ),
+    # === 科技 · AI > 学术论文（Hugging Face Daily Papers，替代 arXiv） ===
     SourceConfig(
         id="hf_papers",
-        name="Hugging Face Papers",
+        name="Hugging Face Papers · Daily",
         category="ai",
         subcategory="papers",
+        # URL 由 scraper 内部拼接 ?date=YYYY-MM-DD（当天），固定占位为 /papers
         url="https://huggingface.co/papers",
         scraper_type="html",
         parser="hf_papers",
-        limit=15,
+        limit=40,
     ),
     # === 科技 · AI > 开源生态 ===
     SourceConfig(
@@ -234,26 +205,6 @@ SOURCES: list[SourceConfig] = [
         url="https://github.com/trending",
         scraper_type="github",
         limit=20,
-    ),
-    SourceConfig(
-        id="hf_models",
-        name="Hugging Face Models",
-        category="ai",
-        subcategory="opensource",
-        url="https://huggingface.co/models",
-        scraper_type="hf_models",
-        limit=20,
-    ),
-    # === 科技 · AI > 模型评测 ===
-    SourceConfig(
-        id="artificial_analysis",
-        name="Artificial Analysis",
-        category="ai",
-        subcategory="eval",
-        url="https://artificialanalysis.ai/",
-        scraper_type="leaderboard",
-        parser="artificial_analysis",
-        limit=10,
     ),
     # === 科技 · AI > 官方政策（中国） ===
     SourceConfig(

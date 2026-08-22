@@ -367,12 +367,23 @@ class HtmlScraper(BaseScraper):
     """HTML 抓取器，根据 source.parser 分发到具体解析器。"""
 
     def fetch(self) -> list[NewsItem]:
+        from datetime import datetime
         url = self.source.feed_url or self.source.url
         parser_name = self.source.parser
+        # HF Daily Papers：URL 必须带当天日期参数，且所有条目 published 标当天
+        # （HF daily 按 PT 时区公布，dateString 通常是本地"昨天"，不改正被"只爬当天"过滤）
+        force_today = False
+        if parser_name == "hf_papers":
+            url = url + "?date=" + datetime.now().strftime("%Y-%m-%d")
+            force_today = True
         if not parser_name or parser_name not in HTML_PARSERS:
             raise ValueError(f"未知 HTML 解析器: {parser_name}")
 
         html = self.http.get_text(url)
         soup = BeautifulSoup(html, "lxml")
         items = HTML_PARSERS[parser_name](soup, self.source)
+        if force_today:
+            today_str = datetime.now().strftime("%Y-%m-%d")
+            for it in items:
+                it.published = f"{today_str} 06:00"
         return self._truncate(items)
