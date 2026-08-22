@@ -1,0 +1,40 @@
+name: 新闻日报 · 24h 自动收集
+
+on:
+  schedule:
+    - cron: '0 * * * *'        # 每小时收集一次，24 小时不间断
+  push:
+    branches: [main]           # 推送即触发首次生成
+  workflow_dispatch:           # 支持手动触发
+
+permissions:
+  contents: write              # 供 peaceiris/actions-gh-pages 推送到 gh-pages 分支
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 配置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+
+      - name: 收集新闻并生成静态看板
+        run: python live_server.py --build-static docs/index.html
+
+      - name: 发布到 GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./docs
+          publish_branch: gh-pages
+          user_name: github-actions[bot]
+          user_email: github-actions[bot]@users.noreply.github.com
+          commit_message: "chore: 自动更新新闻看板 (${{ github.run_id }})"

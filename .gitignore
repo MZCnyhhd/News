@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+
+# 运行时数据（每次工作流重新生成）
+data/
+logs/
+outputs/
+docs/
+
+# 临时 / 调试文件
+_*
+*.log
+
+# 工具元数据（含本地记忆，勿入仓）
+.workbuddy/
