@@ -263,6 +263,8 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/":
                 self._send(200, DASHBOARD_HTML.encode("utf-8"),
                            "text/html; charset=utf-8")
+            elif path in ("/simple.html", "/simple"):
+                self._serve_simple()
             elif path.startswith("/static/"):
                 # 静态资源：仅允许 STATIC_DIR 内白名单扩展名，防路径穿越
                 rel = path[len("/static/"):]
@@ -347,6 +349,28 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             SSE_HUB.unsubscribe(q)
 
+    # ---------- 简易版（内存缓存 30 秒，避免频繁拉库）
+
+    _SIMPLE_CACHE: dict = {"ts": 0.0, "body": b""}
+
+    def _serve_simple(self) -> None:
+        """Serve 简易版 HTML（人民日报要闻 / Reuters 有图 / 科技 6 品牌）。"""
+        now = time.time()
+        cached = self._SIMPLE_CACHE
+        if now - cached["ts"] < 30 and cached["body"]:
+            self._send(200, cached["body"], "text/html; charset=utf-8")
+            return
+        today_str = date.today().isoformat()
+        conn = storage.get_conn()
+        try:
+            items = storage.get_items(conn, today_str)
+        finally:
+            conn.close()
+        html = build_simple_html(items, today_str).encode("utf-8")
+        cached["ts"] = now
+        cached["body"] = html
+        self._send(200, html, "text/html; charset=utf-8")
+
 
 # ---------------------------------------------------------------- 看板页面
 
@@ -414,7 +438,13 @@ main { max-width: 100%; margin: 0; padding: 14px 20px 60px; }
    布局：每个属性维度占一行，左侧属性名 + 右侧 pill 列表
    视觉：未激活 = 白底浅灰边；激活 = 橙色背景 (#ff7d39) + 白字
 */
-.attr-filter { background: linear-gradient(180deg, #ffffff 0%, #f7f9fc 100%); border: 1px solid #e7ecf5; border-radius: 12px; padding: 14px 18px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(30,41,59,.05); }
+.attr-filter { background: linear-gradient(180deg, #ffffff 0%, #f7f9fc 100%); border: 1px solid #e7ecf5; border-radius: 12px; padding: 14px 18px 14px; margin-bottom: 14px; box-shadow: 0 1px 3px rgba(30,41,59,.05); position: relative; padding-top: 38px; }
+.attr-filter .view-switcher { position: absolute; top: 10px; left: 18px; right: 18px; display: flex; align-items: center; justify-content: space-between; gap: 8px; pointer-events: none; }
+.attr-filter .view-switcher .switcher-label { font-size: 11.5px; color: #94a3b8; font-weight: 600; letter-spacing: .4px; pointer-events: auto; }
+.attr-filter .view-switcher .switcher-tabs { display: inline-flex; background: #f1f5f9; border: 1px solid #e3e8f2; border-radius: 9px; padding: 3px; gap: 2px; pointer-events: auto; }
+.attr-filter .view-switcher a { display: inline-block; padding: 5px 14px; border-radius: 6px; font-size: 12.5px; color: #475569; text-decoration: none; font-weight: 600; transition: all .14s ease; white-space: nowrap; line-height: 1.3; }
+.attr-filter .view-switcher a:hover:not(.active) { color: #ff7d39; background: #fff8f3; }
+.attr-filter .view-switcher a.active { background: linear-gradient(135deg, #ff7d39 0%, #ff9558 100%); color: #fff; box-shadow: 0 2px 5px rgba(255,125,57,.30); }
 .attr-rows { display: flex; flex-direction: column; gap: 12px; }
 .attr-row { display: flex; align-items: flex-start; gap: 16px; }
 .attr-row-label { flex: 0 0 76px; padding-top: 5px; font-size: 13px; font-weight: 700; color: #1e293b; text-align: right; letter-spacing: .2px; }
@@ -691,8 +721,19 @@ function renderAttrFilter(items, groups) {
     });
   });
 
-  return '<div class="attr-filter" id="attrfilter"><div class="attr-rows">' +
+  return '<div class="attr-filter" id="attrfilter">__VIEW_SWITCHER__<div class="attr-rows">' +
     rowsHtml.join("") + '</div></div>';
+}
+
+// ===== 视图切换器（点击 → 跳 simple.html 或回到 /）=====
+// 全量版/精简版部署在同级目录：./simple.html 和 ./ 都适用
+function bindViewSwitcher() {
+  const root = document.querySelector('.attr-filter .view-switcher');
+  if (!root) return;
+  const full = root.querySelector('a[data-mode="full"]');
+  const simple = root.querySelector('a[data-mode="simple"]');
+  if (full) full.href = './';
+  if (simple) simple.href = 'simple.html';
 }
 
 // ===== 增量更新：仅刷 attr-filter 内每个 pill 的数字徽章 + active 态，不重建 DOM =====
@@ -838,6 +879,7 @@ function render(nowStr) {
       renderAttrFilter(cachedItems.slice(), FILTER_GROUPS) +
       '<div id="items"></div>';
     bindAttrFilter();
+    bindViewSwitcher();
   } else {
     // 增量：attr-filter 的所有节点结构都保留，只刷 .pcnt 数字 + .zero 灰化
     updateAttrFilterCounts(cachedItems);
@@ -961,6 +1003,23 @@ loadInitial();
 </html>
 """
 
+def _view_switcher_html(mode: str) -> str:
+    """生成 .view-switcher HTML；mode='full' 全量版高亮，mode='simple' 精简版高亮。
+    href 由前端 bindViewSwitcher() 在加载时根据当前路径动态设置。
+    """
+    full_cls = "active" if mode == "full" else ""
+    simple_cls = "active" if mode == "simple" else ""
+    return (
+        '<div class="view-switcher" id="viewswitcher">'
+        '<span class="switcher-label">查看模式</span>'
+        '<span class="switcher-tabs">'
+        f'<a data-mode="full" class="{full_cls}" href="#">全量版</a>'
+        f'<a data-mode="simple" class="{simple_cls}" href="#">精简版</a>'
+        '</span>'
+        '</div>'
+    )
+
+
 # 注入各源官网入口：{source_id: {name, url}}，供前端空状态直达链接使用
 # 合并：抓取源 SOURCES + 目录式条目 DIRECTORY_SOURCES（无爬虫，仅展示入口）
 _dash_homes = {s.id: {"name": s.name, "url": s.url} for s in SOURCES if s.url}
@@ -968,6 +1027,11 @@ _dash_homes.update(all_directory_homes())
 DASHBOARD_HTML = DASHBOARD_HTML.replace(
     "__SOURCE_HOMES__",
     json.dumps(_dash_homes, ensure_ascii=False),
+)
+# 实时版 + 静态版共用同一份 DASHBOARD_HTML 模板；默认全量版高亮
+DASHBOARD_HTML = DASHBOARD_HTML.replace(
+    "__VIEW_SWITCHER__",
+    _view_switcher_html("full"),
 )
 
 
@@ -1064,6 +1128,13 @@ li .thumb { max-width: 56px; max-height: 36px; margin-left: 8px; vertical-align:
 li a { color: #1e293b; text-decoration: none; font-weight: 500; }
 li a:hover { color: #ff7d39; }
 .empty-msg { color: #94a3b8; font-size: 13px; padding: 14px 0 6px; }
+/* 简易版 view-switcher：与主看板一致风格（橙色胶囊） */
+.view-switcher { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.view-switcher .switcher-label { font-size: 11.5px; color: #94a3b8; font-weight: 600; letter-spacing: .4px; }
+.view-switcher .switcher-tabs { display: inline-flex; background: #f1f5f9; border: 1px solid #e3e8f2; border-radius: 9px; padding: 3px; gap: 2px; }
+.view-switcher a { display: inline-block; padding: 5px 14px; border-radius: 6px; font-size: 12.5px; color: #475569; text-decoration: none; font-weight: 600; transition: all .14s ease; white-space: nowrap; line-height: 1.3; }
+.view-switcher a:hover:not(.active) { color: #ff7d39; background: #fff8f3; }
+.view-switcher a.active { background: linear-gradient(135deg, #ff7d39 0%, #ff9558 100%); color: #fff; box-shadow: 0 2px 5px rgba(255,125,57,.30); }
 footer { color: #94a3b8; font-size: 11.5px; text-align: center;
          margin-top: 56px; padding-top: 16px; border-top: 1px solid #f1f5f9; }
 footer a { color: #94a3b8; }
@@ -1073,6 +1144,7 @@ footer a { color: #94a3b8; }
 <header>
   <h1>📰 新闻简易版</h1>
   <div class="meta">__DAY__ · 静态快照 · 每小时更新 · <a href="./">主看板</a></div>
+  __VIEW_SWITCHER__
 </header>
 
 <section>
@@ -1176,6 +1248,7 @@ def build_simple_html(items: list[dict], day_str: str) -> str:
         .replace("__SEC1__", _render_simple_section(sec1))
         .replace("__SEC2__", _render_simple_section(sec2, with_thumb=True))
         .replace("__SEC3__", _render_simple_section(sec3))
+        .replace("__VIEW_SWITCHER__", _view_switcher_html("simple"))
     )
 
 
