@@ -1096,6 +1096,17 @@ def build_static(output_path: str) -> int:
 SIMPLE_TECH_IDS = {"hf_papers", "openai_news", "openai_research", "deepmind", "anthropic",
                    "zhipu", "deepseek", "qwen"}
 
+# 科技段分组展示：每个品牌一个子标题；源 id → 品牌归属（与 FILTER_GROUPS 科技组一致）
+SIMPLE_TECH_GROUPS = [
+    ("ChatGPT / OpenAI", ["openai_news", "openai_research"]),
+    ("Gemini / Google", ["deepmind", "google_research"]),
+    ("Anthropic", ["anthropic"]),
+    ("智谱 GLM", ["zhipu"]),
+    ("DeepSeek", ["deepseek"]),
+    ("通义千问", ["qwen"]),
+    ("Hugging Face Papers", ["hf_papers"]),
+]
+
 # 简易版模板（静态 HTML，无 JS、无 SSE；数据在构建时直接渲染为 HTML）
 SIMPLE_HTML = """<!DOCTYPE html>
 <html lang="zh-CN">
@@ -1128,6 +1139,15 @@ li .thumb { max-width: 56px; max-height: 36px; margin-left: 8px; vertical-align:
 li a { color: #1e293b; text-decoration: none; font-weight: 500; }
 li a:hover { color: #ff7d39; }
 .empty-msg { color: #94a3b8; font-size: 13px; padding: 14px 0 6px; }
+/* 科技段按品牌分组：每个品牌一个小标题 + 该品牌文章列表 */
+.brand-block { margin: 18px 0 4px; }
+.brand-block h3 { font-size: 14px; margin: 0 0 8px; padding: 7px 12px; color: #1e293b;
+                  background: linear-gradient(180deg, #ffffff, #f7f9fc); border: 1px solid #e7ecf5;
+                  border-left: 3px solid #ff7d39; border-radius: 8px; display: flex; align-items: center; gap: 8px; }
+.brand-block h3 .bcnt { font-size: 11px; font-weight: 700; color: #fff; background: #ff7d39;
+                        border-radius: 999px; padding: 1px 8px; min-width: 20px; text-align: center; }
+.brand-block ol { padding-left: 22px; margin: 0; }
+.brand-block li { margin: 9px 0; }
 /* 简易版 view-switcher：与主看板一致风格（橙色胶囊） */
 .view-switcher { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
 .view-switcher .switcher-label { font-size: 11.5px; color: #94a3b8; font-weight: 600; letter-spacing: .4px; }
@@ -1158,7 +1178,7 @@ footer a { color: #94a3b8; }
 </section>
 
 <section>
-  <h2>科技 · 6 大品牌 <span class="tag">ChatGPT / Gemini / Anthropic / 智谱 / DeepSeek / 千问</span><span class="count">__N3__ 条</span></h2>
+  <h2>科技 · AI 品牌 <span class="tag">ChatGPT / Gemini / Anthropic / 智谱 / DeepSeek / 千问 / HF</span><span class="count">__N3__ 条</span></h2>
   __SEC3__
 </section>
 
@@ -1208,6 +1228,27 @@ def _render_simple_section(items: list[dict], *, with_thumb: bool = False) -> st
     return f'<ol>{"".join(lis)}</ol>'
 
 
+def _render_simple_tech(items: list[dict]) -> str:
+    """科技段按品牌分组渲染：每个品牌一个子标题 (h3) + 该品牌文章列表。
+    仅展示有内容的品牌，避免空组噪音；品牌顺序由 SIMPLE_TECH_GROUPS 决定。
+    """
+    if not items:
+        return '<div class="empty-msg">今日暂无收录</div>'
+    blocks: list[str] = []
+    for label, ids in SIMPLE_TECH_GROUPS:
+        subset = [it for it in items if it.get("source_id", "") in ids]
+        if not subset:
+            continue
+        subset.sort(key=lambda x: (x.get("published") or ""), reverse=True)
+        blocks.append(
+            '<div class="brand-block">'
+            f'<h3>{_escape(label)}<span class="bcnt">{len(subset)}</span></h3>'
+            + _render_simple_section(subset)
+            + '</div>'
+        )
+    return "".join(blocks) if blocks else '<div class="empty-msg">今日暂无收录</div>'
+
+
 def _filter_simple(items: list[dict]) -> tuple[list[dict], list[dict], list[dict]]:
     """按 3 块精要切分条目：
     - 人民日报 仅 要闻版面（section 以 "要闻" 结尾）
@@ -1247,7 +1288,7 @@ def build_simple_html(items: list[dict], day_str: str) -> str:
         .replace("__N3__", str(len(sec3)))
         .replace("__SEC1__", _render_simple_section(sec1))
         .replace("__SEC2__", _render_simple_section(sec2, with_thumb=True))
-        .replace("__SEC3__", _render_simple_section(sec3))
+        .replace("__SEC3__", _render_simple_tech(sec3))
         .replace("__VIEW_SWITCHER__", _view_switcher_html("simple"))
     )
 
