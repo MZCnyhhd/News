@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import argparse
+import html as html_module
 import json
 import logging
 import re
@@ -436,6 +437,9 @@ main { max-width: 100%; margin: 0; padding: 14px 20px 60px; }
 }
 .attr-pill.zero { opacity: .38; pointer-events: none; }
 .attr-pill.zero .pcnt { display: none; }
+/* 0 条 → 直达源站的链接 pill：恢复点击响应 + 去掉下划线 */
+.attr-pill-link.zero { pointer-events: auto; text-decoration: none; }
+.attr-pill-link.zero:hover { color: var(--accent); border-color: var(--accent); opacity: .9; }
 /* 激活态：橙色背景 + 白字（参考 Boss 直聘） */
 .attr-pill.active {
   background: linear-gradient(135deg, #ff7d39 0%, #ff9558 100%);
@@ -446,12 +450,8 @@ main { max-width: 100%; margin: 0; padding: 14px 20px 60px; }
 .attr-pill.all { font-weight: 700; }
 /* 叶子行（具体单源 pill）样式稍弱以区分聚合行 */
 .attr-row.sub .attr-row-label { color: #64748b; font-weight: 600; font-size: 12.5px; }
-/* 源站导航（目录源，仅链接） */
-.src-nav { margin: -4px 0 16px; padding: 12px 16px; background: #fbfcff; border: 1px dashed #e0e6f0; border-radius: 12px; }
-.src-nav-title { font-size: 11.5px; font-weight: 700; color: #94a3b8; letter-spacing: .5px; margin-bottom: 9px; }
-.src-nav-links { display: flex; flex-wrap: wrap; gap: 6px; }
-.src-nav-link { display: inline-flex; align-items: center; font-size: 12px; color: #64748b; text-decoration: none; border: 1px solid #e3e8f2; background: #fff; border-radius: 8px; padding: 3px 10px; transition: all .14s ease; }
-.src-nav-link:hover { border-color: var(--accent); color: var(--accent); transform: translateY(-1px); }
+/* 0 条源 → 直达源站链接（与 pill 同一形状，灰化） */
+.attr-pill-link { text-decoration: none; color: inherit; }
 .empty { text-align: center; color: var(--text-muted); padding: 48px 0 60px; font-size: 14px; }
 .empty-hint { margin-top: 18px; font-size: 12.5px; color: var(--text-muted); }
 .src-links { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 12px; max-width: 640px; margin-left: auto; margin-right: auto; }
@@ -570,7 +570,7 @@ const FILTER_GROUPS = [
   // ===== 科技（全部分类，2026-08-22 起默认展示）=====
   {
     key: "tech", label: "科技",
-    root: { label: "科技", match: ["arxiv_cv","arxiv_cl","arxiv_lg","hf_models","hf_papers","chatbot_arena","artificial_analysis","openai_news","openai_research","anthropic","deepmind","google_research","meta_ai","ms_ai","nvidia_ai","mit_tech_review","github_trending","hf_blog"] },
+    root: { label: "科技", match: ["arxiv_cv","arxiv_cl","arxiv_lg","hf_models","hf_papers","artificial_analysis","openai_news","openai_research","anthropic","deepmind","google_research","meta_ai","ms_ai","nvidia_ai","mit_tech_review","github_trending","hf_blog"] },
     branches: [
       { label: "论文 · arXiv", match: ["arxiv_cv","arxiv_cl","arxiv_lg"],
         leaves: [
@@ -578,13 +578,12 @@ const FILTER_GROUPS = [
           { label: "arXiv cs.CL", match: ["arxiv_cl"] },
           { label: "arXiv cs.LG", match: ["arxiv_lg"] },
         ]},
-      { label: "模型 · 榜单", match: ["hf_models","hf_papers","chatbot_arena","artificial_analysis"],
-        leaves: [
-          { label: "HF Models", match: ["hf_models"] },
-          { label: "HF Papers", match: ["hf_papers"] },
-          { label: "Chatbot Arena", match: ["chatbot_arena"] },
-          { label: "Artificial Analysis", match: ["artificial_analysis"] },
-        ]},
+{ label: "模型 · 榜单", match: ["hf_models","hf_papers","artificial_analysis"],
+      leaves: [
+        { label: "HF Models", match: ["hf_models"] },
+        { label: "HF Papers", match: ["hf_papers"] },
+        { label: "Artificial Analysis", match: ["artificial_analysis"] },
+      ]},
       { label: "AI 研究", match: ["openai_news","openai_research","anthropic","deepmind","google_research","meta_ai","ms_ai","nvidia_ai","mit_tech_review","github_trending","hf_blog"],
         leaves: [
           { label: "OpenAI", match: ["openai_news","openai_research"] },
@@ -604,7 +603,7 @@ const FILTER_GROUPS = [
 const REAL_SOURCE_IDS = ["reuters", "people_daily", "mit_tech_review", "openai_news",
   "openai_research", "anthropic", "deepmind", "google_research", "meta_ai", "ms_ai",
   "nvidia_ai", "hf_blog", "arxiv_lg", "arxiv_cl", "arxiv_cv", "hf_papers",
-  "github_trending", "hf_models", "chatbot_arena", "artificial_analysis",
+  "github_trending", "hf_models", "artificial_analysis",
   "gov_policy", "miit", "cac", "ndrc", "cast", "ia_cas", "pku_ai", "tsinghua_ai",
   "baai", "caai", "cctv"];
 
@@ -632,13 +631,28 @@ const isActive = (ids) => {
 const idsAttr = (ids) => ids.join(",");
 
 // 工具：渲染单个 pill
+// 单源 0 条 → 直接外链到源站（避免点了筛选却空列表的尴尬）；
+// 其余情况 → 渲染为按钮（筛选行为）
 function renderPill(label, ids, opts) {
   opts = opts || {};
   const c = opts.count;
+  const isZero = (c === 0 && !opts.alwaysShow);
+  const isSingleSrc = (ids.length === 1);
+  // 单源 0 条：直接外链到源站
+  if (isZero && isSingleSrc) {
+    const h = SOURCE_HOMES[ids[0]];
+    if (h && h.url) {
+      const cls = "attr-pill attr-pill-link zero";
+      return '<a class="' + cls + '" href="' + h.url + '" target="_blank" rel="noopener" ' +
+        'data-ids="' + idsAttr(ids) + '" title="今日暂无收录，点击直达 ' + escapeHtml(h.name) + '">' +
+        '<span class="plabel">' + escapeHtml(label) + '</span>' +
+      '</a>';
+    }
+  }
   const cls = "attr-pill"
     + (opts.isAll ? " all" : "")
     + (isActive(ids) ? " active" : "")
-    + (c === 0 && !opts.alwaysShow ? " zero" : "");
+    + (isZero ? " zero" : "");
   const cntStr = (c === undefined) ? "" : '<span class="pcnt">' + c + '</span>';
   return '<button class="' + cls + '" data-ids="' + idsAttr(ids) + '">' +
     '<span class="plabel">' + escapeHtml(label) + '</span>' +
@@ -689,21 +703,8 @@ function renderAttrFilter(items, groups) {
     });
   });
 
-  // 源站导航（从 SOURCE_HOMES 中剔除真实爬虫源）
-  const dirLinks = Object.keys(SOURCE_HOMES)
-    .filter(id => !REAL_SOURCE_IDS.includes(id) && SOURCE_HOMES[id] && SOURCE_HOMES[id].url)
-    .map(id => {
-      const h = SOURCE_HOMES[id];
-      return '<a class="src-nav-link" href="' + h.url + '" target="_blank" rel="noopener">' +
-        escapeHtml(h.name) + '</a>';
-    }).join("");
-  const nav = dirLinks
-    ? '<div class="src-nav"><div class="src-nav-title">源站导航 · 目录源（点击直达官网，暂无自动抓取）</div>' +
-      '<div class="src-nav-links">' + dirLinks + '</div></div>'
-    : '';
-
   return '<div class="attr-filter" id="attrfilter"><div class="attr-rows">' +
-    rowsHtml.join("") + '</div></div>' + nav;
+    rowsHtml.join("") + '</div></div>';
 }
 
 // ===== 增量更新：仅刷 attr-filter 内每个 pill 的数字徽章 + active 态，不重建 DOM =====
@@ -802,19 +803,7 @@ function sortByTime(arr) {
   });
 }
 
-// 仅"源站导航"区域
-function renderSrcNav() {
-  const dirLinks = Object.keys(SOURCE_HOMES)
-    .filter(id => !REAL_SOURCE_IDS.includes(id) && SOURCE_HOMES[id] && SOURCE_HOMES[id].url)
-    .map(id => {
-      const h = SOURCE_HOMES[id];
-      return '<a class="src-nav-link" href="' + h.url + '" target="_blank" rel="noopener">' +
-        escapeHtml(h.name) + '</a>';
-    }).join("");
-  if (!dirLinks) return "";
-  return '<div class="src-nav"><div class="src-nav-title">源站导航 · 目录源（点击直达官网，暂无自动抓取）</div>' +
-    '<div class="src-nav-links">' + dirLinks + '</div></div>';
-}
+// （原"源站导航"区已下线：2026-08-22 移除 src-nav 块，0 条源改为直接链接到源站）
 
 // 空状态：列出当前 filter 覆盖源的官网入口
 function renderEmptyState(visibleIds) {
@@ -859,7 +848,6 @@ function render(nowStr) {
     // 首次：把 attr-filter + nav + items 三个分区一次性挂到 #list
     list.innerHTML =
       renderAttrFilter(cachedItems.slice(), FILTER_GROUPS) +
-      renderSrcNav() +
       '<div id="items"></div>';
     bindAttrFilter();
   } else {
@@ -1050,6 +1038,186 @@ def build_static(output_path: str) -> int:
     return 0
 
 
+# ---------------------------------------------------------------- 简易版（3 块精要，独立 docs/simple.html）
+
+# 简易版 6 大品牌源 ID 集合（ChatGPT/Gemini/Anthropic/智谱/DeepSeek/千问）
+SIMPLE_TECH_IDS = {"openai_news", "openai_research", "deepmind", "anthropic",
+                   "zhipu", "deepseek", "qwen"}
+
+# 简易版模板（静态 HTML，无 JS、无 SSE；数据在构建时直接渲染为 HTML）
+SIMPLE_HTML = """<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>新闻简易版 · __DAY__</title>
+<style>
+body { font: 14px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+       max-width: 800px; margin: 24px auto; padding: 0 16px 80px; color: #1e293b; }
+header { padding: 12px 0 18px; border-bottom: 1px solid #f1f5f9; margin-bottom: 24px; }
+h1 { font-size: 22px; margin: 0 0 4px; }
+.meta { color: #64748b; font-size: 12.5px; }
+.meta a { color: #64748b; }
+section { margin: 28px 0; }
+h2 { font-size: 15.5px; margin: 0 0 12px; padding-bottom: 6px; border-bottom: 2px solid #f1f5f9; }
+h2 .count { color: #94a3b8; font-weight: 400; margin-left: 8px; font-size: 13px; }
+h2 .tag { display: inline-block; font-size: 11px; color: #64748b; background: #f1f5f9;
+          border-radius: 4px; padding: 1px 6px; margin-left: 6px; font-weight: 500; }
+ol { padding-left: 22px; margin: 0; }
+li { margin: 10px 0; line-height: 1.5; }
+li .time { color: #94a3b8; font-size: 11.5px; margin-left: 8px; white-space: nowrap; }
+li .src { color: #64748b; font-size: 11.5px; margin-left: 6px;
+          background: #f8fafc; border-radius: 3px; padding: 1px 5px; }
+li .sec { color: #94a3b8; font-size: 11px; margin-left: 6px; }
+li .thumb { max-width: 56px; max-height: 36px; margin-left: 8px; vertical-align: middle;
+            border-radius: 4px; border: 1px solid #f1f5f9; }
+li a { color: #1e293b; text-decoration: none; font-weight: 500; }
+li a:hover { color: #ff7d39; }
+.empty-msg { color: #94a3b8; font-size: 13px; padding: 14px 0 6px; }
+footer { color: #94a3b8; font-size: 11.5px; text-align: center;
+         margin-top: 56px; padding-top: 16px; border-top: 1px solid #f1f5f9; }
+footer a { color: #94a3b8; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📰 新闻简易版</h1>
+  <div class="meta">__DAY__ · 静态快照 · 每小时更新 · <a href="./">主看板</a></div>
+</header>
+
+<section>
+  <h2>人民日报 · 要闻 <span class="tag">top headlines</span><span class="count">__N1__ 条</span></h2>
+  __SEC1__
+</section>
+
+<section>
+  <h2>Reuters · 有图片 <span class="tag">world / business</span><span class="count">__N2__ 条</span></h2>
+  __SEC2__
+</section>
+
+<section>
+  <h2>科技 · 6 大品牌 <span class="tag">ChatGPT / Gemini / Anthropic / 智谱 / DeepSeek / 千问</span><span class="count">__N3__ 条</span></h2>
+  __SEC3__
+</section>
+
+<footer>
+  简易版 · GitHub Actions 每小时构建 · <a href="./">返回主看板</a>
+</footer>
+</body>
+</html>
+"""
+
+
+def _escape(s) -> str:
+    """统一 escape；容忍 None/非字符串。"""
+    if s is None:
+        return ""
+    return html_module.escape(str(s))
+
+
+def _render_simple_section(items: list[dict], *, with_thumb: bool = False) -> str:
+    """渲染简易版单个分区为 <ol><li>...</li></ol>；空集合返回提示。"""
+    if not items:
+        return '<div class="empty-msg">今日暂无收录</div>'
+    lis: list[str] = []
+    for it in items:
+        title = _escape(it.get("title", "")).strip()
+        if not title:
+            continue
+        url = _escape(it.get("url", "#"))
+        pub = (it.get("published") or "").replace("T", " ")
+        time_str = _escape(pub[-16:]) if pub else ""
+        src = _escape(it.get("source_name") or it.get("source_id") or "")
+        extra = it.get("extra") or {}
+        sec_label = extra.get("section") or ""
+        sec_html = f'<span class="sec">{_escape(sec_label)}</span>' if sec_label else ""
+        thumb_html = ""
+        if with_thumb and extra.get("image"):
+            thumb_html = f'<img class="thumb" src="{_escape(extra["image"])}" loading="lazy" alt="">'
+        lis.append(
+            '<li>'
+            f'<a href="{url}" target="_blank" rel="noopener">{title}</a>'
+            f'{thumb_html}'
+            f'<span class="time">{time_str}</span>'
+            f'<span class="src">{src}</span>'
+            f'{sec_html}'
+            '</li>'
+        )
+    return f'<ol>{"".join(lis)}</ol>'
+
+
+def _filter_simple(items: list[dict]) -> tuple[list[dict], list[dict], list[dict]]:
+    """按 3 块精要切分条目：
+    - 人民日报 仅 要闻版面（section 以 "要闻" 结尾）
+    - Reuters 仅带图片（extra.image 存在）
+    - 科技 仅 SIMPLE_TECH_IDS 中的 6 大品牌
+    """
+    sec1: list[dict] = []  # 人民日报 要闻
+    sec2: list[dict] = []  # Reuters 有图
+    sec3: list[dict] = []  # 科技 6 品牌
+    for it in items:
+        sid = it.get("source_id", "")
+        extra = it.get("extra") or {}
+        if sid == "people_daily":
+            sec_name = extra.get("section") or ""
+            # 版面名形如 "01版：要闻" / "02版：要闻" —— 过滤出所有"要闻"版面
+            if sec_name.endswith("要闻") or sec_name == "要闻":
+                sec1.append(it)
+        elif sid == "reuters":
+            if extra.get("image"):
+                sec2.append(it)
+        elif sid in SIMPLE_TECH_IDS:
+            sec3.append(it)
+    # 按发布时间倒序
+    for lst in (sec1, sec2, sec3):
+        lst.sort(key=lambda x: (x.get("published") or ""), reverse=True)
+    return sec1, sec2, sec3
+
+
+def build_simple_html(items: list[dict], day_str: str) -> str:
+    """生成简易版 HTML：3 块精要（人民日报要闻 / Reuters有图 / 科技6品牌）。"""
+    sec1, sec2, sec3 = _filter_simple(items)
+    return (
+        SIMPLE_HTML
+        .replace("__DAY__", _escape(day_str))
+        .replace("__N1__", str(len(sec1)))
+        .replace("__N2__", str(len(sec2)))
+        .replace("__N3__", str(len(sec3)))
+        .replace("__SEC1__", _render_simple_section(sec1))
+        .replace("__SEC2__", _render_simple_section(sec2, with_thumb=True))
+        .replace("__SEC3__", _render_simple_section(sec3))
+    )
+
+
+def build_simple(output_path: str) -> int:
+    """收集当天全源 → 读 SQLite → 生成简易版 simple.html。"""
+    setup_logging()
+    logger.info("简易版导出：收集当天全源并生成 %s", output_path)
+    collector = Collector(high_interval=10**9, low_interval=10**9)
+    collector._run_tier("low")
+    collector._run_tier("high")
+    today_str = date.today().isoformat()
+    conn = storage.get_conn()
+    try:
+        items = storage.get_items(conn, today_str)
+    finally:
+        conn.close()
+    sec1, sec2, sec3 = _filter_simple(items)
+    html = build_simple_html(items, today_str)
+    out = Path(output_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(html, encoding="utf-8")
+    logger.info("简易版已生成: %s（人民日报要闻=%d / Reuters有图=%d / 科技6品牌=%d）",
+                output_path, len(sec1), len(sec2), len(sec3))
+    print(f"\n✓ 简易版已生成: {output_path}")
+    print(f"  - 人民日报·要闻：{len(sec1)} 条")
+    print(f"  - Reuters·有图片：{len(sec2)} 条")
+    print(f"  - 科技·6 大品牌：{len(sec3)} 条\n")
+    return 0
+
+
 # ---------------------------------------------------------------- 主入口
 
 
@@ -1079,10 +1247,15 @@ def main() -> int:
     ap.add_argument("--build-static", metavar="OUTPUT", default=None,
                     help="生成静态看板 HTML 到 OUTPUT（如 docs/index.html）并退出，"
                          "用于 GitHub Pages 等静态托管")
+    ap.add_argument("--build-simple", metavar="OUTPUT", default=None,
+                    help="生成简易版 HTML 到 OUTPUT（如 docs/simple.html）并退出，"
+                         "3 块精要：人民日报要闻 / Reuters有图 / 科技6大品牌")
     args = ap.parse_args()
 
     if args.build_static:
         return build_static(args.build_static)
+    if args.build_simple:
+        return build_simple(args.build_simple)
 
     setup_logging()
     logger.info("实时收集启动：高频每 %d 分钟 / 低频每 %.1f 小时 / 端口 %d",

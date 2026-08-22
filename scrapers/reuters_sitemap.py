@@ -128,6 +128,14 @@ class ReutersSitemapScraper(BaseScraper):
             if m:
                 extra["section"] = m.group(1).capitalize()
 
+            # 尝试从 news sitemap 的 <image:image><image:loc> 提取主图
+            # 部分文章 sitemap 不带图片，提取失败则不写入 extra.image
+            img_tag = url_tag.find("image:image")
+            if img_tag:
+                img_loc = img_tag.find("image:loc")
+                if img_loc and img_loc.text:
+                    extra["image"] = img_loc.text.strip()
+
             items.append(
                 NewsItem(
                     title=title,

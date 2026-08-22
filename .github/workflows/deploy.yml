@@ -29,6 +29,9 @@ jobs:
       - name: 收集新闻并生成静态看板
         run: python live_server.py --build-static docs/index.html
 
+      - name: 收集新闻并生成简易版
+        run: python live_server.py --build-simple docs/simple.html
+
       - name: 发布到 GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
