@@ -527,10 +527,9 @@ function _secNum(s) {
 }
 
 // ===== 属性过滤器（树状分支：单一顶层"科技"，下挂国际/中国/AI 三个一级分支）=====
-// 顶层 1 个一级分类：科技
-// "科技"下挂 3 个二级分类：国际 / 中国 / AI
-// ===== 属性过滤器（2026-08-11：单根 "新闻分类" · 国际/中国子树先隐藏，只显示科技）=====
-// 临时只显示科技子树（用户后续说"先删除国际和中国子树"）；之后可解除注释恢复 3 子树
+// 顶层 3 个一级分类：中国 / 国际 / 科技
+// 国际 = 路透社；科技 = 全部 AI / 论文 / 榜单 / 开源 / 评测源
+// ===== 属性过滤器（2026-08-22：用户要求"全部新闻收集"——中国 + 国际(路透社) + 科技 全部展示）=====
 const FILTER_GROUPS = [
   // ===== 中国（当前展示）=====
   {
@@ -560,38 +559,46 @@ const FILTER_GROUPS = [
         ]},
     ],
   },
-  // ===== 科技（暂时隐藏，后续可取消注释恢复）=====
-  // {
-  //   key: "tech", label: "科技",
-  //   root: { label: "科技", match: ["arxiv_cv","arxiv_cl","arxiv_lg","hf_models","hf_papers","chatbot_arena","artificial_analysis","openai_news","openai_research","anthropic","deepmind","google_research","meta_ai","ms_ai","nvidia_ai","mit_tech_review","github_trending","hf_blog"] },
-  //   branches: [
-  //     { label: "论文 · arXiv", match: ["arxiv_cv","arxiv_cl","arxiv_lg"],
-  //       leaves: [
-  //         { label: "arXiv cs.CV", match: ["arxiv_cv"] },
-  //         { label: "arXiv cs.CL", match: ["arxiv_cl"] },
-  //         { label: "arXiv cs.LG", match: ["arxiv_lg"] },
-  //       ]},
-  //     { label: "模型 · 榜单", match: ["hf_models","hf_papers","chatbot_arena","artificial_analysis"],
-  //       leaves: [
-  //         { label: "HF Models", match: ["hf_models"] },
-  //         { label: "HF Papers", match: ["hf_papers"] },
-  //         { label: "Chatbot Arena", match: ["chatbot_arena"] },
-  //         { label: "Artificial Analysis", match: ["artificial_analysis"] },
-  //       ]},
-  //     { label: "AI 研究", match: ["openai_news","openai_research","anthropic","deepmind","google_research","meta_ai","ms_ai","nvidia_ai","mit_tech_review","github_trending","hf_blog"],
-  //       leaves: [
-  //         { label: "OpenAI", match: ["openai_news","openai_research"] },
-  //         { label: "Anthropic", match: ["anthropic"] },
-  //         { label: "Google DeepMind", match: ["deepmind","google_research"] },
-  //         { label: "Meta AI", match: ["meta_ai"] },
-  //         { label: "Microsoft AI", match: ["ms_ai"] },
-  //         { label: "NVIDIA AI", match: ["nvidia_ai"] },
-  //         { label: "MIT Tech Review", match: ["mit_tech_review"] },
-  //         { label: "GitHub Trending", match: ["github_trending"] },
-  //         { label: "HF Blog", match: ["hf_blog"] },
-  //       ]},
-  //   ],
-  // },
+  // ===== 国际（路透社）=====
+  {
+    key: "intl", label: "国际",
+    root: { label: "国际", match: ["reuters"] },
+    branches: [
+      { label: "路透社", match: ["reuters"] },
+    ],
+  },
+  // ===== 科技（全部分类，2026-08-22 起默认展示）=====
+  {
+    key: "tech", label: "科技",
+    root: { label: "科技", match: ["arxiv_cv","arxiv_cl","arxiv_lg","hf_models","hf_papers","chatbot_arena","artificial_analysis","openai_news","openai_research","anthropic","deepmind","google_research","meta_ai","ms_ai","nvidia_ai","mit_tech_review","github_trending","hf_blog"] },
+    branches: [
+      { label: "论文 · arXiv", match: ["arxiv_cv","arxiv_cl","arxiv_lg"],
+        leaves: [
+          { label: "arXiv cs.CV", match: ["arxiv_cv"] },
+          { label: "arXiv cs.CL", match: ["arxiv_cl"] },
+          { label: "arXiv cs.LG", match: ["arxiv_lg"] },
+        ]},
+      { label: "模型 · 榜单", match: ["hf_models","hf_papers","chatbot_arena","artificial_analysis"],
+        leaves: [
+          { label: "HF Models", match: ["hf_models"] },
+          { label: "HF Papers", match: ["hf_papers"] },
+          { label: "Chatbot Arena", match: ["chatbot_arena"] },
+          { label: "Artificial Analysis", match: ["artificial_analysis"] },
+        ]},
+      { label: "AI 研究", match: ["openai_news","openai_research","anthropic","deepmind","google_research","meta_ai","ms_ai","nvidia_ai","mit_tech_review","github_trending","hf_blog"],
+        leaves: [
+          { label: "OpenAI", match: ["openai_news","openai_research"] },
+          { label: "Anthropic", match: ["anthropic"] },
+          { label: "Google DeepMind", match: ["deepmind","google_research"] },
+          { label: "Meta AI", match: ["meta_ai"] },
+          { label: "Microsoft AI", match: ["ms_ai"] },
+          { label: "NVIDIA AI", match: ["nvidia_ai"] },
+          { label: "MIT Tech Review", match: ["mit_tech_review"] },
+          { label: "GitHub Trending", match: ["github_trending"] },
+          { label: "HF Blog", match: ["hf_blog"] },
+        ]},
+    ],
+  },
 ];
 // 真实爬虫源 id（用于从 SOURCE_HOMES 中区分出「目录源」放到源站导航）
 const REAL_SOURCE_IDS = ["reuters", "people_daily", "mit_tech_review", "openai_news",
@@ -609,12 +616,10 @@ let activeSourceIds = null;      // 同上但为数组
 // 把数组转成排序后的稳定字符串（用于 toggle 比较，避免 ["a","b"] vs ["b","a"] 误判）
 const toKey = (ids) => ids.slice().sort().join(",");
 
-// 默认激活第一个分组（当前为「中国」），使看板默认只展示中国新闻；
-// 点击已激活的根节点可取消过滤、显示全部源。
-if (FILTER_GROUPS.length) {
-  activeSourceIds = FILTER_GROUPS[0].root.match.slice();
-  activeKey = toKey(activeSourceIds);
-}
+// 默认不过滤（activeSourceIds = null）→ 看板加载即展示全部新闻（中国 + 国际 + 科技）。
+// 点击任意分组的"全部" pill 缩小到该分类；再次点击已激活 pill 取消过滤回到全部。
+activeSourceIds = null;
+activeKey = null;
 
 // pill 的"激活"判定：精确匹配 activeSourceIds（避免父 pill 被高亮的视觉混乱）。
 // 行式布局下，每个 pill 都是"选中精确等于自己"才高亮，避免选中叶子时整行变色。
