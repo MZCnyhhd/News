@@ -1003,18 +1003,23 @@ loadInitial();
 </html>
 """
 
-def _view_switcher_html(mode: str) -> str:
+def _view_switcher_html(mode: str, *, full_href: str = "#", simple_href: str = "#") -> str:
     """生成 .view-switcher HTML；mode='full' 全量版高亮，mode='simple' 精简版高亮。
-    href 由前端 bindViewSwitcher() 在加载时根据当前路径动态设置。
+
+    full_href / simple_href 在构建静态页或 live server 路由时按"目标页 URL"直接注入，
+    避免简单版本（无 JS）点击不跳转。
     """
+    import html as _html
     full_cls = "active" if mode == "full" else ""
     simple_cls = "active" if mode == "simple" else ""
+    full_href_e = _html.escape(full_href, quote=True)
+    simple_href_e = _html.escape(simple_href, quote=True)
     return (
         '<div class="view-switcher" id="viewswitcher">'
         '<span class="switcher-label">查看模式</span>'
         '<span class="switcher-tabs">'
-        f'<a data-mode="full" class="{full_cls}" href="#">全量版</a>'
-        f'<a data-mode="simple" class="{simple_cls}" href="#">精简版</a>'
+        f'<a data-mode="full" class="{full_cls}" href="{full_href_e}">全量版</a>'
+        f'<a data-mode="simple" class="{simple_cls}" href="{simple_href_e}">精简版</a>'
         '</span>'
         '</div>'
     )
@@ -1029,9 +1034,10 @@ DASHBOARD_HTML = DASHBOARD_HTML.replace(
     json.dumps(_dash_homes, ensure_ascii=False),
 )
 # 实时版 + 静态版共用同一份 DASHBOARD_HTML 模板；默认全量版高亮
+# 静态导出 docs/index.html 时再次覆写 href=simple.html（指向同级文件）
 DASHBOARD_HTML = DASHBOARD_HTML.replace(
     "__VIEW_SWITCHER__",
-    _view_switcher_html("full"),
+    _view_switcher_html("full", full_href="#", simple_href="simple.html"),
 )
 
 
@@ -1289,7 +1295,8 @@ def build_simple_html(items: list[dict], day_str: str) -> str:
         .replace("__SEC1__", _render_simple_section(sec1))
         .replace("__SEC2__", _render_simple_section(sec2, with_thumb=True))
         .replace("__SEC3__", _render_simple_tech(sec3))
-        .replace("__VIEW_SWITCHER__", _view_switcher_html("simple"))
+        .replace("__VIEW_SWITCHER__",
+                 _view_switcher_html("simple", full_href="./", simple_href="#"))
     )
 
 
