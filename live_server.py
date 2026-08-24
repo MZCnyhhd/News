@@ -1068,7 +1068,7 @@ def _uncomment_filter_groups(html: str) -> str:
 
 def build_static_html(items: list[dict], day_str: str) -> str:
     """生成自包含静态看板 HTML：内嵌当天条目数据，禁用 SSE/轮询。"""
-    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    now_str = datetime.now(BEIJING_TZ).strftime("%Y-%m-%d %H:%M:%S")
     # DASHBOARD_HTML 为只读常量（字符串不可变，replace 返回新串，不污染实时服务）
     html = DASHBOARD_HTML
     embed = (
