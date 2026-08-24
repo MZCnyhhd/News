@@ -26,8 +26,17 @@ import queue
 import sys
 import threading
 import time
-from datetime import date, datetime
+from datetime import date, datetime, timezone, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+# 北京时区：用于跨环境 day keying（GH Actions runner 默认 UTC；若用 date.today()
+# 会拿到 UTC 日期，导致 Beijing 凌晨文章被归到「昨天」而漏掉）。
+BEIJING_TZ = timezone(timedelta(hours=8))
+
+
+def today_bj() -> str:
+    """今天的日期（北京时间），作为 day key。统一所有 day 决策点。"""
+    return datetime.now(BEIJING_TZ).strftime("%Y-%m-%d")
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -86,7 +95,7 @@ class Collector:
     # ---------- 单源抓取
 
     def _fetch_one(self, src) -> None:
-        today_str = date.today().isoformat()
+        today_str = today_bj()
         ts = datetime.now().strftime("%H:%M:%S")
         try:
             scraper = build_scraper(src, self.http)
@@ -150,8 +159,8 @@ class Collector:
 
     def _morning_cron(self) -> None:
         """每日定时任务：人民日报每日 06:00 上版，确保当日 06:00 之后必抓一次。"""
-        now = datetime.now()
-        today_str = now.date().isoformat()
+        now = datetime.now(BEIJING_TZ)
+        today_str = today_bj()
         if self._pd_last_date == today_str:
             return  # 今天已抓过
         if now.hour < 6:
@@ -293,7 +302,7 @@ class Handler(BaseHTTPRequestHandler):
                 except OSError:
                     self._send(404, b"not found", "text/plain")
             elif path == "/api/items":
-                today_str = date.today().isoformat()
+                today_str = today_bj()
                 conn = storage.get_conn()
                 try:
                     items = storage.get_items(conn, today_str)
@@ -360,7 +369,7 @@ class Handler(BaseHTTPRequestHandler):
         if now - cached["ts"] < 30 and cached["body"]:
             self._send(200, cached["body"], "text/html; charset=utf-8")
             return
-        today_str = date.today().isoformat()
+        today_str = today_bj()
         conn = storage.get_conn()
         try:
             items = storage.get_items(conn, today_str)
@@ -1081,7 +1090,7 @@ def build_static(output_path: str) -> int:
     collector = Collector(high_interval=10**9, low_interval=10**9)
     collector._run_tier("low")
     collector._run_tier("high")
-    today_str = date.today().isoformat()
+    today_str = today_bj()
     conn = storage.get_conn()
     try:
         items = storage.get_items(conn, today_str)
@@ -1307,7 +1316,7 @@ def build_simple(output_path: str) -> int:
     collector = Collector(high_interval=10**9, low_interval=10**9)
     collector._run_tier("low")
     collector._run_tier("high")
-    today_str = date.today().isoformat()
+    today_str = today_bj()
     conn = storage.get_conn()
     try:
         items = storage.get_items(conn, today_str)
@@ -1338,7 +1347,7 @@ def setup_logging() -> None:
         format="%(asctime)s [%(levelname)s] %(message)s",
         datefmt="%H:%M:%S",
         handlers=[
-            logging.FileHandler(log_dir / f"live_{date.today().isoformat()}.log",
+            logging.FileHandler(log_dir / f"live_{today_bj()}.log",
                                 encoding="utf-8"),
             logging.StreamHandler(sys.stdout),
         ],
