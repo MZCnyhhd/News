@@ -118,8 +118,14 @@ class PeopleDailyScraper(BaseScraper):
     def _extract_articles(
         self, soup: BeautifulSoup, base_url: str, section_name: str = ""
     ) -> list[NewsItem]:
-        """从版面页提取文章标题与链接，并附带版面名标签。"""
+        """从版面页提取文章标题与链接，并附带版面名标签。
+
+        用户偏好（2026-08-25）：跳过广告和副刊版面（不要广告、不要副刊/文学副刊）。
+        """
         items: list[NewsItem] = []
+        # 用户偏好：广告 / 副刊 类版面整体跳过
+        if any(kw in section_name for kw in ("广告", "副刊")):
+            return items
         # 文章链接形如 content_XXXXXXXX.html
         pattern = re.compile(r"content_\d+\.html")
 

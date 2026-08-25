@@ -51,7 +51,7 @@ SOURCES: list[SourceConfig] = [
         parser="cctv",
         limit=40,
     ),
-    # === 科技 · 全球 ===
+    # === 科技 · 全球（MIT Tech Review + SpaceX 等） ===
     SourceConfig(
         id="mit_tech_review",
         name="MIT Technology Review",
@@ -61,6 +61,17 @@ SOURCES: list[SourceConfig] = [
         scraper_type="feed",
         feed_url="https://www.technologyreview.com/feed/",
         limit=15,
+    ),
+    # SpaceX 官方站是 SPA 无静态 HTML，走 Google News site: 代理 RSS 取最新条目
+    SourceConfig(
+        id="spacex_news",
+        name="SpaceX",
+        category="tech_global",
+        subcategory=None,
+        url="https://www.spacex.com/updates/",
+        scraper_type="feed",
+        feed_url="https://news.google.com/rss/search?q=site%3Aspacex.com&hl=en-US&gl=US&ceid=US:en",
+        limit=10,
     ),
     # === 科技 · AI > AI 实验室动态 ===
     SourceConfig(
@@ -166,12 +177,14 @@ SOURCES: list[SourceConfig] = [
     ),
     SourceConfig(
         id="nvidia_ai",
-        name="NVIDIA AI Blog",
+        name="NVIDIA Newsroom",
         category="ai",
         subcategory="labs",
-        url="https://blogs.nvidia.com/blog/category/deep-learning/",
+        url="https://nvidianews.nvidia.com/",
         scraper_type="feed",
-        feed_url="https://blogs.nvidia.com/blog/category/deep-learning/feed/",
+        # NVIDIA AI Blog deep-learning feed 已停更（最后一条 2026-07-08），
+        # 改用 Newsroom RSS —— 每天都有当天发布的产品/合作/财报新闻
+        feed_url="https://nvidianews.nvidia.com/rss.xml",
         limit=15,
     ),
     SourceConfig(

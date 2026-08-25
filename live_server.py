@@ -606,10 +606,10 @@ const FILTER_GROUPS = [
       { label: "路透社", match: ["reuters"] },
     ],
   },
-  // ===== 科技（2026-08-22：arXiv + 模型榜单去除，论文改为 HF Daily Papers）=====
+  // ===== 科技（2026-08-25：NVIDIA 换 Newsroom，新增 SpaceX 航天）=====
   {
     key: "tech", label: "科技",
-    root: { label: "科技", match: ["hf_papers","openai_news","openai_research","anthropic","deepmind","google_research","meta_ai","ms_ai","nvidia_ai","mit_tech_review","github_trending","hf_blog"] },
+    root: { label: "科技", match: ["hf_papers","openai_news","openai_research","anthropic","deepmind","google_research","meta_ai","ms_ai","nvidia_ai","mit_tech_review","github_trending","hf_blog","spacex_news"] },
     branches: [
       { label: "论文 · HF Daily Papers", match: ["hf_papers"] },
       { label: "AI 研究", match: ["openai_news","openai_research","anthropic","deepmind","google_research","meta_ai","ms_ai","nvidia_ai","mit_tech_review","github_trending","hf_blog"],
@@ -619,10 +619,14 @@ const FILTER_GROUPS = [
           { label: "Google DeepMind", match: ["deepmind","google_research"] },
           { label: "Meta AI", match: ["meta_ai"] },
           { label: "Microsoft AI", match: ["ms_ai"] },
-          { label: "NVIDIA AI", match: ["nvidia_ai"] },
+          { label: "NVIDIA", match: ["nvidia_ai"] },
           { label: "MIT Tech Review", match: ["mit_tech_review"] },
           { label: "GitHub Trending", match: ["github_trending"] },
           { label: "HF Blog", match: ["hf_blog"] },
+        ]},
+      { label: "SpaceX 航天", match: ["spacex_news"],
+        leaves: [
+          { label: "SpaceX", match: ["spacex_news"] },
         ]},
     ],
   },
@@ -630,7 +634,7 @@ const FILTER_GROUPS = [
 // 真实爬虫源 id
 const REAL_SOURCE_IDS = ["reuters", "people_daily", "mit_tech_review", "openai_news",
   "openai_research", "anthropic", "deepmind", "google_research", "meta_ai", "ms_ai",
-  "nvidia_ai", "hf_blog", "hf_papers", "github_trending",
+  "nvidia_ai", "hf_blog", "hf_papers", "github_trending", "spacex_news",
   "gov_policy", "miit", "cac", "ndrc", "cast", "ia_cas", "pku_ai", "tsinghua_ai",
   "baai", "caai", "cctv"];
 
@@ -699,6 +703,9 @@ function renderRow(label, pills, isSub) {
 // 层级：根(cn root) → 3 个 L1 mid(人民日报/政府机构/学术机构) → 每个 L1 的 leaves
 // 渲染：每个节点一行；每行 = 属性名 + "全部" pill + N 个子节点 pill
 // 点击：精确匹配选中（避免父 pill 联动高亮带来的视觉混乱）；再次点击 → 取消
+//
+// 空数据 sub-row 自动隐藏（2026-08-25）：branch 自己 0 条 + 所有 leaves 0 条时，
+// 该 sub-row 不渲染，避免「点啥都没数据」的视觉噪音（顶层 pill 仍保留灰化）。
 function renderAttrFilter(items, groups) {
   const cnt = {};
   for (const it of items) cnt[it.source_id] = (cnt[it.source_id] || 0) + 1;
@@ -724,6 +731,10 @@ function renderAttrFilter(items, groups) {
       if (leaves.length === 0) return;
       const allBranchIds = br.match.slice();
       const allBranchC = sum(allBranchIds);
+      // 空数据 sub-row 隐藏：branch 自己 0 条 + 所有 leaves 也 0 条 → 不渲染
+      if (allBranchC === 0 && leaves.every(lv => sum(lv.match) === 0)) {
+        return;
+      }
       const subPills = leaves.map(lv => renderPill(lv.label, lv.match, { count: sum(lv.match) }));
       subPills.unshift(renderPill("全部", allBranchIds, { count: allBranchC, isAll: true }));
       rowsHtml.push(renderRow(br.label, subPills, true));
@@ -868,8 +879,12 @@ function renderItemsArea(visibleItems, filterIdsForEmpty) {
   const sorted = visibleItems.slice();
   sortByTime(sorted);
   const total = sorted.length;
+  // 编号规则：人民日报按版号正序（顶层 1 → 底部 total；与新华社播报节奏一致），
+  //          其余源保持倒序（最新顶到底，total→1）
   container.innerHTML = sorted.map((i, idx) => renderItemRow(
-    i, total - idx, SOURCE_DISPLAY[i.source_id] || i.source_name
+    i,
+    (i.source_id === "people_daily") ? (idx + 1) : (total - idx),
+    SOURCE_DISPLAY[i.source_id] || i.source_name
   )).join("");
 }
 

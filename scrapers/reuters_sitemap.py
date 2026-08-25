@@ -33,32 +33,44 @@ class ReutersSitemapScraper(BaseScraper):
             raise RuntimeError("Reuters sitemap 索引未找到子 sitemap")
 
         # 2. 依次抓取子 sitemap。Reuters 把最近新闻分页到多个子 sitemap
-        # （?from=0/100/200/...），每页约 50 条。遍历全部以保证当天 00:00 起的
-        # World/Business 文章都能抓到，直到满足 limit 或遇到太旧文章为止。
+        # （?from=0/100/200/...），每页约 50 条，按发布时间倒序（offset=0 最新）。
+        # 必须遍历多个子 sitemap 才能覆盖当天 00:00 起的全部 World/Business 文章。
         from datetime import datetime, timezone, timedelta
         BEIJING = timezone(timedelta(hours=8))
         today_bj = datetime.now(BEIJING).strftime("%Y-%m-%d")
+        # 当天 00:00 Beijing time（用于跨日边界比较）
+        today_start_bj = today_bj + " 00:00"
 
         all_items: list[NewsItem] = []
         seen_urls: set[str] = set()
+
         for sm_url in sub_sitemaps:
             try:
                 sm_xml = self.http.get_text(sm_url)
             except Exception:
                 continue
+            page_max_pub = None  # 当前 sub-sitemap 中所有 published 的最大值
+            page_had_today = False
             for it in self._extract_items(sm_xml):
+                pub = it.published or ""
+                # 记录页面内最新发布时间（用于早停判断）
+                if not page_max_pub or pub > page_max_pub:
+                    page_max_pub = pub
                 # 仅保留当天（北京时间）的文章
-                if not it.published or not it.published.startswith(today_bj):
+                if not pub.startswith(today_bj):
                     continue
+                page_had_today = True
                 if it.url in seen_urls:
                     continue
                 seen_urls.add(it.url)
                 all_items.append(it)
-            # 已抓到足够多，且最早的 published 已不在当天，提前停止
-            if len(all_items) >= self.limit:
-                pass  # 继续遍历下一页，以避免漏掉边缘
-            if len(sub_sitemaps) > 20:
-                # 防护：避免抓太多页
+
+            # 早停条件：当前 sub-sitemap 中「最晚一篇」已 < 当天 00:00 Beijing，
+            # 后续子 sitemap 只会更旧，无需继续（每个 sub-sitemap 内本身也是按新→旧排列）
+            if page_max_pub and page_max_pub < today_start_bj:
+                break
+            # 已收集足够多今天文章，但继续到下一子 sitemap 一次以防漏边缘
+            if len(all_items) >= self.limit and not page_had_today:
                 break
 
         # 3. 筛选 world/business，按发布日期倒序
