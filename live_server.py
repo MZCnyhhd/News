@@ -410,40 +410,100 @@ header h1 { font-size: 17px; font-weight: 700; }
 .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .tab .cnt { opacity: .75; font-size: 11.5px; margin-left: 3px; }
 main { max-width: 100%; margin: 0; padding: 14px 20px 60px; }
-.item { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 8px 14px; margin-bottom: 6px; }
-/* 单行布局：flex 让标题列自动占满剩余宽度，所有元素颜色统一为 var(--text)（用户要求"颜色保持一致"） */
-.item .row1 { display: flex; align-items: center; gap: 10px; font-size: 13.5px; line-height: 1.5; color: var(--text); flex-wrap: nowrap; }
+/* ====== 列表项：两行布局（2026-08-25 UI 美化） ======
+   row1：编号 + 倒计时 + 日期 + 来源 + 板块
+   row2：标题 + 简介（可选，来自 RSS description）
+*/
+.item {
+  display: flex; flex-direction: column; gap: 6px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px 11px;
+  margin-bottom: 6px;
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+.item:hover { border-color: #d8e1f1; box-shadow: 0 1px 4px rgba(60,90,150,.06); }
+
+/* ── 第 1 行：元数据条 ── */
+.item .row1 {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; line-height: 1.4; color: var(--text-muted);
+  flex-wrap: nowrap;
+}
 .item .row1 > * { white-space: nowrap; flex-shrink: 0; }
-.item .row1 .num { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 500; min-width: 26px; text-align: right; }
-.item .row1 .pub { color: var(--text); font-variant-numeric: tabular-nums; }
-.item .row1 .rel { color: var(--text); font-weight: 500; font-variant-numeric: tabular-nums; }
-.item .row1 .title { color: var(--text); text-decoration: none; font-weight: 500; font-size: 13.5px; flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.item .row1 .title:hover { color: var(--accent); text-decoration: underline; }
-.item .row1 .title.visited { color: #9ca3af; }
-.item .row1 .title.visited:hover { color: var(--accent); text-decoration: underline; }
-/* 全部 tab 扁平列表里的来源小标签：与其他元素同色（去掉灰底，避免颜色不一致） */
-.src-inline { font-size: 13.5px; color: var(--text); font-weight: 500; }
-/* 国际/中国 tab 的来源分组头：logo + 来源名 + 条数 三者同字号同字重同色 */
-.src-group { margin-bottom: 16px; }
-.src-head { display: flex; align-items: center; gap: 8px; margin: 4px 0 8px; padding-left: 2px; }
-.src-head .src-name { font-size: 14px; font-weight: 700; color: var(--text); }
-.src-head .src-cnt { font-size: 14px; font-weight: 700; color: var(--text); }
-.src-head .src-pill { font-size: 14px; font-weight: 700; color: var(--text); background: transparent; }
-/* section / subcategory / upvotes 徽章：去掉彩色背景，文字与标题同色同字号（用户要求"字体和颜色保持一致"） */
-.badge { color: var(--text); font-weight: 500; font-size: 13.5px; padding: 0; background: transparent; border-radius: 0; }
-.badge.sec { color: var(--text); }
+
+/* 编号：胶囊（顶部 10 条橙红渐变、11-30 琥珀色、其余浅灰） */
+.item .num {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 26px; height: 20px; padding: 0 7px;
+  border-radius: 999px;
+  font-size: 11.5px; font-weight: 700;
+  background: #f1f5f9; color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+.item .num.fresh { background: linear-gradient(135deg, #ef4444, #f97316); color: #fff; box-shadow: 0 1px 3px rgba(239,68,68,.30); }
+.item .num.warm { background: #fef3c7; color: #b45309; }
+
+/* 倒计时 + 日期：紧凑色阶 */
+.item .time-block { display: inline-flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; }
+.item .rel { font-weight: 600; color: #475569; }
+.item .rel.hot { color: #dc2626; }       /* < 1h 红 */
+.item .rel.warm { color: #d97706; }      /* < 6h 橙 */
+.item .rel-dot { color: #cbd5e1; font-size: 9px; }
+.item .pub { color: #94a3b8; font-size: 11.5px; }
+
+/* 来源 pill：浅底圆角 */
+.item .src-inline {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12.5px; font-weight: 600; color: #1e293b;
+  padding: 1px 9px 1px 6px;
+  background: #f6f8fc; border: 1px solid #e7ecf5;
+  border-radius: 999px;
+}
+
+/* section / subcategory / upvotes 通用徽章（保留旧 .badge 兼容性，但加彩色背景仅给 sec） */
+.badge { display: inline-block; font-weight: 500; font-size: 12.5px; padding: 0; }
+.badge.sec {
+  display: inline-block;
+  padding: 1px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; letter-spacing: .2px;
+  background: #ede9fe; color: #6d28d9;
+}
+.badge.sec.world    { background: #dbeafe; color: #1d4ed8; }
+.badge.sec.business { background: #dcfce7; color: #15803d; }
+.badge.sec.busi     { background: #dcfce7; color: #15803d; }
+.badge.sec.ai       { background: #fce7f3; color: #be185d; }
+.badge.sec.tech     { background: #ffedd5; color: #c2410c; }
+.badge.sec.policy   { background: #e0e7ff; color: #4338ca; }
+.badge.sec.cn       { background: #fee2e2; color: #b91c1c; }
 .badge.red { color: var(--text); }
 .badge.intl { color: var(--text); }
 .badge.ups { color: var(--text); }
 .badge.stars { color: #d97706; font-weight: 600; }
-.src-logo { height: 22px; width: auto; max-width: 110px; vertical-align: -5px; margin-right: 2px; }
-/* 人民日报 logo 自带红框，在白卡片上太刺眼 → 缩小 + 加白色 padding + 轻边框 */
-.src-logo.pd { height: 24px; vertical-align: -7px; padding: 2px 6px; background: #fff; border: 1px solid #f0e2e2; border-radius: 4px; box-sizing: content-box; }
-/* MIT 等深色 logo 在白底上可读性差 → 保留原色（自带背景） */
-.src-logo.mit { height: 22px; padding: 2px 6px; background: #000; border-radius: 4px; box-sizing: content-box; }
-/* Reuters 红底白字 logo */
-.src-logo.reuters { height: 22px; padding: 2px 6px; background: #fff; border: 1px solid #f5e0d8; border-radius: 4px; box-sizing: content-box; }
-.rel { font-variant-numeric: tabular-nums; }
+
+.src-logo { height: 20px; width: auto; max-width: 96px; vertical-align: -4px; margin-right: 0; }
+/* 各源 logo 容器微调 */
+.src-logo.pd { height: 22px; vertical-align: -6px; padding: 1px 6px; background: #fff; border: 1px solid #f0e2e2; border-radius: 4px; box-sizing: content-box; }
+.src-logo.mit { height: 20px; padding: 1px 6px; background: #000; border-radius: 4px; box-sizing: content-box; }
+.src-logo.reuters { height: 20px; padding: 1px 6px; background: #fff; border: 1px solid #f5e0d8; border-radius: 4px; box-sizing: content-box; }
+
+/* ── 第 2 行：标题 + 简介 ── */
+.item .row2 { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.item .title {
+  color: var(--text); text-decoration: none;
+  font-size: 14.5px; font-weight: 600; line-height: 1.5;
+  flex: 1 1 0; min-width: 0;
+}
+.item .title:hover { color: var(--accent); text-decoration: underline; }
+.item .title.visited { color: #9ca3af; }
+.item .title.visited:hover { color: var(--accent); text-decoration: underline; }
+.item .summary {
+  font-size: 12.5px; line-height: 1.55; color: #64748b;
+  font-weight: 400;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 /* ===== 属性过滤器：Boss 直聘风格行式筛选器 =====
    布局：每个属性维度占一行，左侧属性名 + 右侧 pill 列表
    视觉：未激活 = 白底浅灰边；激活 = 橙色背景 (#ff7d39) + 白字
@@ -824,52 +884,146 @@ function bindAttrFilter() {
     );
   });
 }
-// 元素顺序严格按用户示例：编号 → 相对时间 → 日期 → 板块 → [来源/分类/点赞 徽章] → 标题
+
+// 把 12934 → '12.9k' / 1234 → '1.2k' / 48950 → '49k' / 999 → '999'
+function fmtStars(n) {
+  if (typeof n !== "number" || isNaN(n)) return "";
+  if (n < 1000) return String(n);
+  if (n < 10000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+  return Math.floor(n / 1000) + "k";
+}
+
+// 去 HTML 标签 + 实体 + 多余空白（简介预览用）
+function stripHtml(s) {
+  if (!s) return "";
+  return String(s)
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+// 解析「N 分钟前」「N 小时前」「N 天前」→ 分钟数（用于色阶）；不认识返回 -1
+function relToMin(rel) {
+  if (!rel) return -1;
+  const m1 = /^(\d+) 分钟前$/.exec(rel);
+  if (m1) return parseInt(m1[1], 10);
+  const m2 = /^(\d+) 小时前$/.exec(rel);
+  if (m2) return parseInt(m2[1], 10) * 60;
+  const m3 = /^(\d+) 天前$/.exec(rel);
+  if (m3) return parseInt(m3[1], 10) * 1440;
+  if (rel === "刚刚") return 0;
+  return -1;
+}
+
+// element 顺序：行 1 = [num]  [time-block]  [src-inline]  [sec]  [sub]  [stars]
+//                行 2 = [title]  [summary 可选]
 function renderItemRow(i, num, dispName) {
   // 兜底：部分源（GitHub Trending / HF Models）的 published 为空，用 first_seen 代替以保证时间始终显示
   const pub = i.published || (i.first_seen ? i.first_seen.replace("T", " ").slice(0, 16) : "");
   const rel = (i.source_id === "people_daily") ? "" : relTime(pub);
-  const relCell = rel ? '<span class="rel">' + escapeHtml(rel) + "</span>" : "";
-  const pubCell = pub ? '<span class="pub">' + escapeHtml(fmtPub({...i, published: pub})) + "</span>" : "";
-  const sec = (i.extra && i.extra.section) ? '<span class="badge sec">' + escapeHtml(i.extra.section) + "</span>" : "";
-  const srcLabel = dispName
-    ? '<span class="src-inline">' + escapeHtml(dispName) + "</span>"
+  const pubStr = pub ? fmtPub({ ...i, published: pub }) : "";
+
+  // 编号色阶：≤10 fresh（橙红）、11-30 warm（琥珀）、其余 浅灰
+  let numCls = "num";
+  if (num <= 10) numCls += " fresh";
+  else if (num <= 30) numCls += " warm";
+
+  // 倒计时色阶：< 60min hot（红）、< 360min warm（橙）、其余默认
+  let relCls = "rel";
+  const m = relToMin(rel);
+  if (m >= 0) {
+    if (m < 60) relCls += " hot";
+    else if (m < 360) relCls += " warm";
+  }
+
+  // 板块 class 映射（根据 section 名动态选色）
+  let secCls = "badge sec";
+  let secLabel = "";
+  if (i.extra && i.extra.section) {
+    secLabel = i.extra.section;
+    const s = secLabel.toLowerCase();
+    if (s.includes("world")) secCls += " world";
+    else if (s.includes("business") || s.includes("busi") || s === "biz") secCls += " business";
+    else if (s.includes("ai") || s.includes("智能")) secCls += " ai";
+    else if (s.includes("tech") || s.includes("科技")) secCls += " tech";
+    else if (s.includes("policy") || s.includes("政策") || s.includes("要闻")) secCls += " policy";
+    else if (s.includes("中国") || s.includes("cn")) secCls += " cn";
+  }
+  const secCell = secLabel
+    ? '<span class="' + secCls + '">' + escapeHtml(secLabel) + '</span>'
     : "";
-  const sub = i.subcategory ? '<span class="badge">' + escapeHtml(SUB_LABELS[i.subcategory] || i.subcategory) + "</span>" : "";
-  const ups = (i.extra && i.extra.upvotes) ? '<span class="badge ups">▲ ' + i.extra.upvotes + "</span>" : "";
-  // GitHub Trending：渲染 ★ 总数（如 48.9k）+ 今日数（如 +891）
+
+  // 来源 pill
+  const srcCell = dispName
+    ? '<span class="src-inline">' + escapeHtml(dispName) + '</span>'
+    : "";
+
+  // subcategory 徽章
+  const subCell = i.subcategory
+    ? '<span class="badge">' + escapeHtml(SUB_LABELS[i.subcategory] || i.subcategory) + '</span>'
+    : "";
+
+  // GitHub Trending：渲染 ★ 总数 + 今日数
   let starsCell = "";
   if (i.source_id === "github_trending" && i.extra) {
     const total = i.extra.stars;
-    const today = i.extra.trend;  // 例：'891 stars today'
+    const today = i.extra.trend;
     const totalFmt = (typeof total === "number")
       ? '<span class="badge stars">★ ' + escapeHtml(fmtStars(total)) + '</span>'
       : "";
     let todayFmt = "";
     if (today) {
-      const m = today.match(/^([\d,]+)\s+stars?\s+(today|this week|this month)/i);
-      if (m) {
-        todayFmt = '<span class="badge stars">+ ' + escapeHtml(fmtStars(parseInt(m[1].replace(/,/g,"")))) + ' today</span>';
+      const mm = today.match(/^([\d,]+)\s+stars?\s+(today|this week|this month)/i);
+      if (mm) {
+        todayFmt = '<span class="badge stars">+ ' + escapeHtml(fmtStars(parseInt(mm[1].replace(/,/g, "")))) + ' today</span>';
       }
     }
     starsCell = totalFmt + todayFmt;
   }
-  const vis = visitedSet.has(i.url) ? " visited" : "";
-  // data-url 用来在增量更新时定位/移除条目
-  // 顺序：num → rel → pub → [源名(srclabel)] → [section] → [subcategory] → [stars] → title
-  return '<div class="item" data-url="' + escapeHtml(i.url) + '"><div class="row1">' +
-    '<span class="num">' + num + "</span>" +
-    relCell + pubCell + srcLabel + sec + sub + ups + starsCell +
-    '<a class="title' + vis + '" href="' + i.url + '" target="_blank" rel="noopener">' + escapeHtml(i.title) + "</a>" +
-    "</div></div>";
-}
 
-// 把 12934 → '12.9k' / 1234 → '1.2k' / 48950 → '49k' / 999 → '999'
-function fmtStars(n) {
-  if (typeof n !== "number" || isNaN(n)) return "";
-  if (n >= 10000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
-  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
-  return String(n);
+  // 紧凑时间块：「倒计时 · 日期」
+  const timeBlock = (rel || pubStr)
+    ? '<span class="time-block">' +
+      (rel ? '<span class="' + relCls + '">' + escapeHtml(rel) + '</span>' : "") +
+      (rel && pubStr ? '<span class="rel-dot">·</span>' : "") +
+      (pubStr ? '<span class="pub">' + escapeHtml(pubStr) + '</span>' : "") +
+      '</span>'
+    : "";
+
+  // 已访问标记
+  const vis = visitedSet.has(i.url) ? " visited" : "";
+
+  // 简介：来自 RSS description 写入的 extra.summary；GitHub Trending 用 extra.desc 兜底
+  let summaryCell = "";
+  const rawSummary = (i.extra && (i.extra.summary || i.extra.desc)) || "";
+  if (rawSummary) {
+    const cleaned = stripHtml(rawSummary);
+    if (cleaned && cleaned !== i.title) {
+      const truncated = cleaned.length > 140 ? cleaned.slice(0, 140) + "…" : cleaned;
+      summaryCell = '<div class="summary">' + escapeHtml(truncated) + '</div>';
+    }
+  }
+
+  return '<div class="item" data-url="' + escapeHtml(i.url) + '">' +
+    '<div class="row1">' +
+    '<span class="' + numCls + '">' + num + '</span>' +
+    timeBlock +
+    srcCell +
+    secCell +
+    subCell +
+    starsCell +
+    '</div>' +
+    '<div class="row2">' +
+    '<a class="title' + vis + '" href="' + i.url + '" target="_blank" rel="noopener">' + escapeHtml(i.title) + '</a>' +
+    summaryCell +
+    '</div>' +
+    '</div>';
 }
 
 // 全局排序函数：按 published 倒序，人民日报同日用版号作 tiebreaker

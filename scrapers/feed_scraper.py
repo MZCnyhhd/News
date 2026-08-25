@@ -9,6 +9,24 @@ import feedparser
 from scrapers.base import BaseScraper, NewsItem
 
 
+def _clean_summary(text: str, max_len: int = 280) -> str:
+    """清理 RSS description 中的 HTML 标签、实体、多余空白，截断到 max_len。
+
+    用作 extra.summary 在看板上的简介预览（行 2 副行）。
+    """
+    if not text:
+        return ""
+    import html as html_lib
+    import re as re_lib
+
+    cleaned = re_lib.sub(r"<[^>]+>", " ", text)
+    cleaned = html_lib.unescape(cleaned)
+    cleaned = re_lib.sub(r"\s+", " ", cleaned).strip()
+    if len(cleaned) > max_len:
+        cleaned = cleaned[: max_len - 1] + "…"
+    return cleaned
+
+
 def _normalize_date(entry) -> str | None:
     """从 feedparser 条目提取并规范化日期为北京时间 YYYY-MM-DD HH:MM。
 
@@ -84,12 +102,18 @@ class FeedScraper(BaseScraper):
             title = _clean_title(entry.get("title", ""))
             if not title or not link:
                 continue
+            # 提取 description 作 summary（行 2 副行简介预览）
+            summary = _clean_summary(entry.get("summary") or entry.get("description") or "")
+            extra: dict = {}
+            if summary:
+                extra["summary"] = summary
             items.append(
                 NewsItem(
                     title=title,
                     url=link,
                     published=_normalize_date(entry),
                     source=self.source.name,
+                    extra=extra or None,
                 )
             )
         return items
