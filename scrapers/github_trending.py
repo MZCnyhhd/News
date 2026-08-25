@@ -46,7 +46,18 @@ class GitHubTrendingScraper(BaseScraper):
                     stars_today = text
                     break
 
+            # 总 stars（来自 /owner/repo/stargazers 链接的文本，例如 "48,950"）
+            stars_total = ""
+            for a in article.find_all("a", href=True):
+                if a["href"].endswith("/stargazers"):
+                    stars_total = a.get_text(strip=True).replace(",", "").strip()
+                    if not stars_total.isdigit():
+                        stars_total = ""
+                    break
+
             extra = {"desc": desc} if desc else {}
+            if stars_total:
+                extra["stars"] = int(stars_total)
             if stars_today:
                 extra["trend"] = stars_today
 

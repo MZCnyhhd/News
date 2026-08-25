@@ -435,6 +435,7 @@ main { max-width: 100%; margin: 0; padding: 14px 20px 60px; }
 .badge.red { color: var(--text); }
 .badge.intl { color: var(--text); }
 .badge.ups { color: var(--text); }
+.badge.stars { color: #d97706; font-weight: 600; }
 .src-logo { height: 22px; width: auto; max-width: 110px; vertical-align: -5px; margin-right: 2px; }
 /* 人民日报 logo 自带红框，在白卡片上太刺眼 → 缩小 + 加白色 padding + 轻边框 */
 .src-logo.pd { height: 24px; vertical-align: -7px; padding: 2px 6px; background: #fff; border: 1px solid #f0e2e2; border-radius: 4px; box-sizing: content-box; }
@@ -606,13 +607,13 @@ const FILTER_GROUPS = [
       { label: "路透社", match: ["reuters"] },
     ],
   },
-  // ===== 科技（2026-08-25：NVIDIA 换 Newsroom，新增 SpaceX 航天）=====
+  // ===== 科技（2026-08-25：NVIDIA 换 Newsroom，新增 SpaceX 航天；2026-08-25 再次扩展：AI 研究加国内 4 家）=====
   {
     key: "tech", label: "科技",
-    root: { label: "科技", match: ["hf_papers","openai_news","openai_research","anthropic","deepmind","google_research","meta_ai","ms_ai","nvidia_ai","mit_tech_review","github_trending","hf_blog","spacex_news"] },
+    root: { label: "科技", match: ["hf_papers","openai_news","openai_research","anthropic","deepmind","google_research","meta_ai","ms_ai","nvidia_ai","mit_tech_review","github_trending","hf_blog","spacex_news","deepseek","zhipu","qwen","moonshot"] },
     branches: [
       { label: "论文 · HF Daily Papers", match: ["hf_papers"] },
-      { label: "AI 研究", match: ["openai_news","openai_research","anthropic","deepmind","google_research","meta_ai","ms_ai","nvidia_ai","mit_tech_review","github_trending","hf_blog"],
+      { label: "AI 研究", match: ["openai_news","openai_research","anthropic","deepmind","google_research","meta_ai","ms_ai","nvidia_ai","mit_tech_review","github_trending","hf_blog","deepseek","zhipu","qwen","moonshot"],
         leaves: [
           { label: "OpenAI", match: ["openai_news","openai_research"] },
           { label: "Anthropic", match: ["anthropic"] },
@@ -623,6 +624,10 @@ const FILTER_GROUPS = [
           { label: "MIT Tech Review", match: ["mit_tech_review"] },
           { label: "GitHub Trending", match: ["github_trending"] },
           { label: "HF Blog", match: ["hf_blog"] },
+          { label: "DeepSeek", match: ["deepseek"] },
+          { label: "智谱 GLM", match: ["zhipu"] },
+          { label: "通义千问", match: ["qwen"] },
+          { label: "月之暗面", match: ["moonshot"] },
         ]},
       { label: "SpaceX 航天", match: ["spacex_news"],
         leaves: [
@@ -635,6 +640,7 @@ const FILTER_GROUPS = [
 const REAL_SOURCE_IDS = ["reuters", "people_daily", "mit_tech_review", "openai_news",
   "openai_research", "anthropic", "deepmind", "google_research", "meta_ai", "ms_ai",
   "nvidia_ai", "hf_blog", "hf_papers", "github_trending", "spacex_news",
+  "deepseek", "zhipu", "qwen", "moonshot",
   "gov_policy", "miit", "cac", "ndrc", "cast", "ia_cas", "pku_ai", "tsinghua_ai",
   "baai", "caai", "cctv"];
 
@@ -662,20 +668,22 @@ const isActive = (ids) => {
 const idsAttr = (ids) => ids.join(",");
 
 // 工具：渲染单个 pill
-// 单源 0 条 → 直接外链到源站（避免点了筛选却空列表的尴尬）；
+// 0 条 → 直接外链到源站（避免点了筛选却空列表的尴尬）；
 // 其余情况 → 渲染为按钮（筛选行为）
+// 多源 0 条 fallback：取 ids[0] 的源站作为跳转目标（OpenAI、DeepMind 等 leaflet 同样可点）
 function renderPill(label, ids, opts) {
   opts = opts || {};
   const c = opts.count;
   const isZero = (c === 0 && !opts.alwaysShow);
-  const isSingleSrc = (ids.length === 1);
-  // 单源 0 条：直接外链到源站
-  if (isZero && isSingleSrc) {
+  if (isZero) {
     const h = SOURCE_HOMES[ids[0]];
     if (h && h.url) {
       const cls = "attr-pill attr-pill-link zero";
+      const tip = ids.length === 1
+        ? '今日暂无收录，点击直达 ' + escapeHtml(h.name)
+        : '今日该方向暂无收录（已选 ' + ids.length + ' 个源），点击直达 ' + escapeHtml(h.name);
       return '<a class="' + cls + '" href="' + h.url + '" target="_blank" rel="noopener" ' +
-        'data-ids="' + idsAttr(ids) + '" title="今日暂无收录，点击直达 ' + escapeHtml(h.name) + '">' +
+        'data-ids="' + idsAttr(ids) + '" title="' + tip + '">' +
         '<span class="plabel">' + escapeHtml(label) + '</span>' +
       '</a>';
     }
@@ -829,13 +837,39 @@ function renderItemRow(i, num, dispName) {
     : "";
   const sub = i.subcategory ? '<span class="badge">' + escapeHtml(SUB_LABELS[i.subcategory] || i.subcategory) + "</span>" : "";
   const ups = (i.extra && i.extra.upvotes) ? '<span class="badge ups">▲ ' + i.extra.upvotes + "</span>" : "";
+  // GitHub Trending：渲染 ★ 总数（如 48.9k）+ 今日数（如 +891）
+  let starsCell = "";
+  if (i.source_id === "github_trending" && i.extra) {
+    const total = i.extra.stars;
+    const today = i.extra.trend;  // 例：'891 stars today'
+    const totalFmt = (typeof total === "number")
+      ? '<span class="badge stars">★ ' + escapeHtml(fmtStars(total)) + '</span>'
+      : "";
+    let todayFmt = "";
+    if (today) {
+      const m = today.match(/^([\d,]+)\s+stars?\s+(today|this week|this month)/i);
+      if (m) {
+        todayFmt = '<span class="badge stars">+ ' + escapeHtml(fmtStars(parseInt(m[1].replace(/,/g,"")))) + ' today</span>';
+      }
+    }
+    starsCell = totalFmt + todayFmt;
+  }
   const vis = visitedSet.has(i.url) ? " visited" : "";
   // data-url 用来在增量更新时定位/移除条目
+  // 顺序：num → rel → pub → [源名(srclabel)] → [section] → [subcategory] → [stars] → title
   return '<div class="item" data-url="' + escapeHtml(i.url) + '"><div class="row1">' +
     '<span class="num">' + num + "</span>" +
-    relCell + pubCell + sec + srcLabel + sub + ups +
+    relCell + pubCell + srcLabel + sec + sub + ups + starsCell +
     '<a class="title' + vis + '" href="' + i.url + '" target="_blank" rel="noopener">' + escapeHtml(i.title) + "</a>" +
     "</div></div>";
+}
+
+// 把 12934 → '12.9k' / 1234 → '1.2k' / 48950 → '49k' / 999 → '999'
+function fmtStars(n) {
+  if (typeof n !== "number" || isNaN(n)) return "";
+  if (n >= 10000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+  if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+  return String(n);
 }
 
 // 全局排序函数：按 published 倒序，人民日报同日用版号作 tiebreaker
@@ -1122,9 +1156,9 @@ def build_static(output_path: str) -> int:
 
 # ---------------------------------------------------------------- 简易版（3 块精要，独立 docs/simple.html）
 
-# 简易版 6 大品牌源 ID 集合（ChatGPT/Gemini/Anthropic/智谱/DeepSeek/千问）
+# 简易版 7 大品牌源 ID 集合（ChatGPT/Gemini/Anthropic/智谱/DeepSeek/千问/Moonshot/HF）
 SIMPLE_TECH_IDS = {"hf_papers", "openai_news", "openai_research", "deepmind", "anthropic",
-                   "zhipu", "deepseek", "qwen"}
+                   "zhipu", "deepseek", "qwen", "moonshot"}
 
 # 科技段分组展示：每个品牌一个子标题；源 id → 品牌归属（与 FILTER_GROUPS 科技组一致）
 SIMPLE_TECH_GROUPS = [
@@ -1134,6 +1168,7 @@ SIMPLE_TECH_GROUPS = [
     ("智谱 GLM", ["zhipu"]),
     ("DeepSeek", ["deepseek"]),
     ("通义千问", ["qwen"]),
+    ("月之暗面 Moonshot", ["moonshot"]),
     ("Hugging Face Papers", ["hf_papers"]),
 ]
 
@@ -1178,13 +1213,24 @@ li a:hover { color: #ff7d39; }
                         border-radius: 999px; padding: 1px 8px; min-width: 20px; text-align: center; }
 .brand-block ol { padding-left: 22px; margin: 0; }
 .brand-block li { margin: 9px 0; }
-/* 简易版 view-switcher：与主看板一致风格（橙色胶囊） */
-.view-switcher { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
-.view-switcher .switcher-label { font-size: 11.5px; color: #94a3b8; font-weight: 600; letter-spacing: .4px; }
-.view-switcher .switcher-tabs { display: inline-flex; background: #f1f5f9; border: 1px solid #e3e8f2; border-radius: 9px; padding: 3px; gap: 2px; }
-.view-switcher a { display: inline-block; padding: 5px 14px; border-radius: 6px; font-size: 12.5px; color: #475569; text-decoration: none; font-weight: 600; transition: all .14s ease; white-space: nowrap; line-height: 1.3; }
+/* 简易版 view-switcher：与主看板一致风格（橙色胶囊，左label右tabs）
+   全量版 view-switcher 在 .attr-filter 顶部绝对定位（label-left tabs-right）；
+   简易版无 attr-filter 容器，靠自身 style 模拟等同布局 */
+.view-switcher { display: flex; align-items: center; justify-content: space-between;
+                gap: 10px; pointer-events: auto;
+                margin-top: 12px; padding: 6px 10px;
+                background: #fff; border: 1px solid #e7ecf5; border-radius: 10px; }
+.view-switcher .switcher-label { font-size: 11.5px; color: #94a3b8; font-weight: 600;
+                                  letter-spacing: .4px; }
+.view-switcher .switcher-tabs { display: inline-flex; background: #f1f5f9;
+                                 border: 1px solid #e3e8f2; border-radius: 9px;
+                                 padding: 3px; gap: 2px; }
+.view-switcher a { display: inline-block; padding: 5px 14px; border-radius: 6px;
+                    font-size: 12.5px; color: #475569; text-decoration: none; font-weight: 600;
+                    transition: all .14s ease; white-space: nowrap; line-height: 1.3; }
 .view-switcher a:hover:not(.active) { color: #ff7d39; background: #fff8f3; }
-.view-switcher a.active { background: linear-gradient(135deg, #ff7d39 0%, #ff9558 100%); color: #fff; box-shadow: 0 2px 5px rgba(255,125,57,.30); }
+.view-switcher a.active { background: linear-gradient(135deg, #ff7d39 0%, #ff9558 100%);
+                           color: #fff; box-shadow: 0 2px 5px rgba(255,125,57,.30); }
 footer { color: #94a3b8; font-size: 11.5px; text-align: center;
          margin-top: 56px; padding-top: 16px; border-top: 1px solid #f1f5f9; }
 footer a { color: #94a3b8; }
@@ -1208,7 +1254,7 @@ footer a { color: #94a3b8; }
 </section>
 
 <section>
-  <h2>科技 · AI 品牌 <span class="tag">ChatGPT / Gemini / Anthropic / 智谱 / DeepSeek / 千问 / HF</span><span class="count">__N3__ 条</span></h2>
+  <h2>科技 · AI 品牌 <span class="tag">ChatGPT / Gemini / Anthropic / 智谱 / DeepSeek / 千问 / 月之暗面 / HF</span><span class="count">__N3__ 条</span></h2>
   __SEC3__
 </section>
 

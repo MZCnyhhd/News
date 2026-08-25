@@ -135,6 +135,17 @@ SOURCES: list[SourceConfig] = [
         feed_url="https://news.google.com/rss/search?q=%22Qwen%22+OR+%22%E5%8D%83%E9%97%AE%22&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
         limit=10,
     ),
+    # 月之暗面 / Moonshot（Kimi），与 zhipu/deepseek/qwen 同模式：Google News RSS 代理
+    SourceConfig(
+        id="moonshot",
+        name="月之暗面 Moonshot",
+        category="ai",
+        subcategory="labs",
+        url="https://www.moonshot.cn/",
+        scraper_type="feed",
+        feed_url="https://news.google.com/rss/search?q=%22Moonshot+AI%22+OR+%22Kimi%22+OR+%22%E6%9C%88%E4%B9%8B%E6%9A%97%E9%9D%A2%22&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
+        limit=10,
+    ),
     SourceConfig(
         id="deepmind",
         name="Google DeepMind",
