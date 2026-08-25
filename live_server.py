@@ -429,7 +429,9 @@ main { max-width: 100%; margin: 0; padding: 14px 20px 60px; }
 .item .row1 {
   display: flex; align-items: center; gap: 8px;
   font-size: 12px; line-height: 1.4; color: var(--text-muted);
-  flex-wrap: nowrap;
+  /* 允许换行：窄屏 row1 子项会自动换行，row2 标题仍在 row1 下方不被挤掉。
+     子项仍保持 white-space: nowrap（文字内不换行），仅在容器边界换项。 */
+  flex-wrap: wrap;
 }
 .item .row1 > * { white-space: nowrap; flex-shrink: 0; }
 
