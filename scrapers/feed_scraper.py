@@ -9,8 +9,12 @@ import feedparser
 from scrapers.base import BaseScraper, NewsItem
 
 
-def _clean_summary(text: str, max_len: int = 280) -> str:
+def _clean_summary(text: str, title: str = "", max_len: int = 280) -> str:
     """清理 RSS description 中的 HTML 标签、实体、多余空白，截断到 max_len。
+
+    去重逻辑：如果 cleaned 与 title 高度相似（完全相等、或标题完全包含 cleaned、
+    或 cleaned 包含标题），则返回空字符串（视为"无简介"）。这是为了避免简介
+    渲染出与标题重复的内容（用户偏好"简介尽量不要和标题重复"）。
 
     用作 extra.summary 在看板上的简介预览（行 2 副行）。
     """
@@ -22,6 +26,29 @@ def _clean_summary(text: str, max_len: int = 280) -> str:
     cleaned = re_lib.sub(r"<[^>]+>", " ", text)
     cleaned = html_lib.unescape(cleaned)
     cleaned = re_lib.sub(r"\s+", " ", cleaned).strip()
+    if not cleaned:
+        return ""
+
+    # 与标题去重（避免概要只是"标题 + 链接"或与标题完全相同的回引内容）
+    if title:
+        t = re_lib.sub(r"\s+", " ", title).strip()
+        if cleaned == t:
+            return ""
+        # 长度阈值：更短一边 ≥ 20 字才判包含，避免误杀短摘要
+        short, long_ = (cleaned, t) if len(cleaned) <= len(t) else (t, cleaned)
+        if len(short) >= 20 and short in long_:
+            return ""
+        # 比例相似度：典型 "标题 + 来源" 模式（"X - Moomoo" vs "X Moomoo"）相似度 ~0.88
+        # 但 cleaned 比 title 长时（多出尾部来源信息），保留 cleaned 以便看出处；
+        # 只有 cleaned 比 title 短或等长且比例 ≥ 0.72 才视为重复
+        try:
+            from difflib import SequenceMatcher
+            ratio = SequenceMatcher(a=cleaned, b=t).ratio()
+            if ratio >= 0.72 and len(cleaned) <= len(t) + 5:
+                return ""
+        except Exception:
+            pass
+
     if len(cleaned) > max_len:
         cleaned = cleaned[: max_len - 1] + "…"
     return cleaned
@@ -102,8 +129,8 @@ class FeedScraper(BaseScraper):
             title = _clean_title(entry.get("title", ""))
             if not title or not link:
                 continue
-            # 提取 description 作 summary（行 2 副行简介预览）
-            summary = _clean_summary(entry.get("summary") or entry.get("description") or "")
+            # 提取 description 作 summary（行 2 副行简介预览）；传入 title 用于去重
+            summary = _clean_summary(entry.get("summary") or entry.get("description") or "", title=title)
             extra: dict = {}
             if summary:
                 extra["summary"] = summary

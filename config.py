@@ -40,17 +40,6 @@ SOURCES: list[SourceConfig] = [
         scraper_type="people_daily",
         limit=300,  # 20 版 x 每版 5-6 篇 ~ 100+，留足富余
     ),
-    # === 中国新闻 · 央视 ===
-    SourceConfig(
-        id="cctv",
-        name="CCTV 新闻联播",
-        category="china",
-        subcategory=None,
-        url="https://news.cctv.com/",
-        scraper_type="cn_source",
-        parser="cctv",
-        limit=40,
-    ),
     # === 科技 · 全球（MIT Tech Review + SpaceX 等） ===
     SourceConfig(
         id="mit_tech_review",
@@ -104,15 +93,16 @@ SOURCES: list[SourceConfig] = [
         parser="anthropic",
         limit=15,
     ),
-    # 中国 AI 实验室（Google News RSS 代理；与 meta_ai 同模式）
+    # 中国 AI 实验室：URL 指向官方博客/新闻中心（用户偏好点源站跳转），feed_url 仍走
+# Google News 宽松关键词搜索保证每日新闻覆盖率（官方博客更新频次太低，无法单独支撑"今日"）。
     SourceConfig(
         id="zhipu",
-        name="智谱 AI",
+        name="智谱 GLM",
         category="ai",
         subcategory="labs",
-        url="https://www.zhipuai.cn/",
+        url="https://www.zhipuai.cn/news",
         scraper_type="feed",
-        feed_url="https://news.google.com/rss/search?q=%22%E6%99%BA%E8%B0%B1%22+OR+%22Zhipu%22&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
+        feed_url="https://news.google.com/rss/search?q=%22GLM%22+OR+%22%E6%99%BA%E8%B0%B1%22&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
         limit=10,
     ),
     SourceConfig(
@@ -120,7 +110,7 @@ SOURCES: list[SourceConfig] = [
         name="DeepSeek",
         category="ai",
         subcategory="labs",
-        url="https://www.deepseek.com/",
+        url="https://api-docs.deepseek.com/news",
         scraper_type="feed",
         feed_url="https://news.google.com/rss/search?q=%22DeepSeek%22&hl=en-US&gl=US&ceid=US:en",
         limit=10,
@@ -130,18 +120,18 @@ SOURCES: list[SourceConfig] = [
         name="通义千问 Qwen",
         category="ai",
         subcategory="labs",
-        url="https://tongyi.aliyun.com/qianwen",
+        url="https://qwenlm.github.io/blog/",
         scraper_type="feed",
         feed_url="https://news.google.com/rss/search?q=%22Qwen%22+OR+%22%E5%8D%83%E9%97%AE%22&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
         limit=10,
     ),
-    # 月之暗面 / Moonshot（Kimi），与 zhipu/deepseek/qwen 同模式：Google News RSS 代理
+    # 月之暗面 / Moonshot（Kimi）
     SourceConfig(
         id="moonshot",
         name="月之暗面 Moonshot",
         category="ai",
         subcategory="labs",
-        url="https://www.moonshot.cn/",
+        url="https://platform.moonshot.cn/blog",
         scraper_type="feed",
         feed_url="https://news.google.com/rss/search?q=%22Moonshot+AI%22+OR+%22Kimi%22+OR+%22%E6%9C%88%E4%B9%8B%E6%9A%97%E9%9D%A2%22&hl=zh-CN&gl=CN&ceid=CN:zh-Hans",
         limit=10,
@@ -229,57 +219,6 @@ SOURCES: list[SourceConfig] = [
         url="https://github.com/trending",
         scraper_type="github",
         limit=20,
-    ),
-    # === 科技 · AI > 官方政策（中国） ===
-    SourceConfig(
-        id="gov_policy",
-        name="国务院政策文件库",
-        category="ai",
-        subcategory="policy",
-        url="https://sousuo.www.gov.cn/zcwjk/policyDocumentLibrary?t=zhengcelibrary&q=%E4%BA%BA%E5%B7%A5%E6%99%BA%E8%83%BD",
-        scraper_type="cn_source",
-        parser="gov_policy",
-        limit=15,
-    ),
-    SourceConfig(
-        id="miit",
-        name="工业和信息化部",
-        category="ai",
-        subcategory="policy",
-        url="https://www.miit.gov.cn",
-        scraper_type="cn_source",
-        parser="miit",
-        limit=15,
-    ),
-    SourceConfig(
-        id="cac",
-        name="国家网信办",
-        category="ai",
-        subcategory="policy",
-        url="http://www.cac.gov.cn",
-        scraper_type="cn_source",
-        parser="cac",
-        limit=15,
-    ),
-    SourceConfig(
-        id="ndrc",
-        name="国家发展改革委",
-        category="ai",
-        subcategory="policy",
-        url="https://www.ndrc.gov.cn",
-        scraper_type="cn_source",
-        parser="ndrc",
-        limit=15,
-    ),
-    SourceConfig(
-        id="cast",
-        name="中国科协",
-        category="ai",
-        subcategory="policy",
-        url="https://www.cast.org.cn",
-        scraper_type="cn_source",
-        parser="cast",
-        limit=10,
     ),
     # === 科技 · AI > 顶尖学术机构（中国） ===
     SourceConfig(

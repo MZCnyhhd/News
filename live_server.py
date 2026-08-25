@@ -488,21 +488,26 @@ main { max-width: 100%; margin: 0; padding: 14px 20px 60px; }
 .src-logo.mit { height: 20px; padding: 1px 6px; background: #000; border-radius: 4px; box-sizing: content-box; }
 .src-logo.reuters { height: 20px; padding: 1px 6px; background: #fff; border: 1px solid #f5e0d8; border-radius: 4px; box-sizing: content-box; }
 
-/* ── 第 2 行：标题 + 简介 ── */
+/* ── 第 2 行：标题 + 简介（单行截断，避免窄屏换行成多行） ── */
 .item .row2 { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .item .title {
   color: var(--text); text-decoration: none;
   font-size: 14.5px; font-weight: 600; line-height: 1.5;
   flex: 1 1 0; min-width: 0;
+  /* 标题单行：超过卡片宽度显示省略号（用户偏好"不要换行显示"） */
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  display: block;
 }
 .item .title:hover { color: var(--accent); text-decoration: underline; }
 .item .title.visited { color: #9ca3af; }
 .item .title.visited:hover { color: var(--accent); text-decoration: underline; }
+/* 简介：1 行截断（与标题一致不换行，避免视觉过长）。
+   真正想看完整内容可点击标题进源站。 */
 .item .summary {
   font-size: 12.5px; line-height: 1.55; color: #64748b;
   font-weight: 400;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-  overflow: hidden;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  display: block;
 }
 /* ===== 属性过滤器：Boss 直聘风格行式筛选器 =====
    布局：每个属性维度占一行，左侧属性名 + 右侧 pill 列表
@@ -629,26 +634,16 @@ function _secNum(s) {
 // ===== 属性过滤器（树状分支：单一顶层"科技"，下挂国际/中国/AI 三个一级分支）=====
 // 顶层 3 个一级分类：中国 / 国际 / 科技
 // 国际 = 路透社；科技 = 全部 AI 实验室 + HF Daily Papers + 开源 + 政策/学术
-// ===== 属性过滤器（2026-08-22 用户全量收集版）=====
+// ===== 属性过滤器（2026-08-25：CCTV 源下架 + 「政府机构」分类下线 + 4 个国内 AI 换官方域）=====
 const FILTER_GROUPS = [
   // ===== 中国 =====
   {
     key: "cn", label: "中国",
-    root: { label: "中国", match: ["people_daily","gov_policy","miit","cac","ndrc","cast","ia_cas","pku_ai","tsinghua_ai","baai","caai","cctv"] },
+    // 2026-08-25: 「政府机构」分类整行下线（用户偏好），余下"人民日报" + "学术机构"
+    root: { label: "中国", match: ["people_daily","ia_cas","pku_ai","tsinghua_ai","baai","caai"] },
     branches: [
       { label: "人民日报", match: ["people_daily"] },
-      { label: "中央电视台", match: ["cctv"],
-        leaves: [
-          { label: "CCTV 新闻联播", match: ["cctv"] },
-        ]},
-      { label: "政府机构", match: ["gov_policy","miit","cac","ndrc","cast"],
-        leaves: [
-          { label: "国务院政策文件库", match: ["gov_policy"] },
-          { label: "工信部", match: ["miit"] },
-          { label: "国家网信办", match: ["cac"] },
-          { label: "发改委", match: ["ndrc"] },
-          { label: "中国科协", match: ["cast"] },
-        ]},
+      // 2026-08-25: CCTV 源 + 「政府机构」分支删除
       { label: "学术机构", match: ["ia_cas","pku_ai","tsinghua_ai","baai","caai"],
         leaves: [
           { label: "中科院自动化所", match: ["ia_cas"] },
@@ -667,7 +662,7 @@ const FILTER_GROUPS = [
       { label: "路透社", match: ["reuters"] },
     ],
   },
-  // ===== 科技（2026-08-25：NVIDIA 换 Newsroom，新增 SpaceX 航天；2026-08-25 再次扩展：AI 研究加国内 4 家）=====
+  // ===== 科技（2026-08-25：NVIDIA 换 Newsroom + 新增 SpaceX；2026-08-25 又：政府机构/学术归"中国"+ 4 国内 AI 换官方域）=====
   {
     key: "tech", label: "科技",
     root: { label: "科技", match: ["hf_papers","openai_news","openai_research","anthropic","deepmind","google_research","meta_ai","ms_ai","nvidia_ai","mit_tech_review","github_trending","hf_blog","spacex_news","deepseek","zhipu","qwen","moonshot"] },
@@ -696,13 +691,13 @@ const FILTER_GROUPS = [
     ],
   },
 ];
-// 真实爬虫源 id
+// 真实爬虫源 id（2026-08-25：cctv 下架）
 const REAL_SOURCE_IDS = ["reuters", "people_daily", "mit_tech_review", "openai_news",
   "openai_research", "anthropic", "deepmind", "google_research", "meta_ai", "ms_ai",
   "nvidia_ai", "hf_blog", "hf_papers", "github_trending", "spacex_news",
   "deepseek", "zhipu", "qwen", "moonshot",
-  "gov_policy", "miit", "cac", "ndrc", "cast", "ia_cas", "pku_ai", "tsinghua_ai",
-  "baai", "caai", "cctv"];
+  "ia_cas", "pku_ai", "tsinghua_ai",
+  "baai", "caai"];
 
 // 当前 sub-filter 选中的 source_id 集合（null = 不过滤，显示全部）
 // 用稳定字符串比较："a,b" === "a,b" 视为同一个选择，便于 toggle
@@ -893,6 +888,28 @@ function fmtStars(n) {
   return Math.floor(n / 1000) + "k";
 }
 
+// SequenceMatcher 比例相似度（Python difflib 行为一致；用于简介与标题去重）
+function smRatio(a, b) {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  const la = a.length, lb = b.length;
+  if (la < 2 || lb < 2) return 0;
+  // 双指针 + 公共子串匹配（与 difflib.SequenceMatcher.ratio 近似：2*M/(la+lb)）
+  // 简化：用 LongestCommonSubsequence 不现实；改用 LCS 滑动窗口近似
+  // 这里用 Python-like 实现：贪心扫描找最大公共子块
+  const n = la + lb;
+  const dp = new Array(n + 1).fill(0);
+  for (let i = 0; i < la; i++) {
+    const cur = dp.slice();
+    for (let j = 0; j < lb; j++) {
+      if (a[i] === b[j]) dp[j + 1] = cur[j] + 1;
+      else dp[j + 1] = Math.max(dp[j], dp[j + 1]);
+    }
+  }
+  const m = dp[lb];
+  return (2 * m) / n;
+}
+
 // 去 HTML 标签 + 实体 + 多余空白（简介预览用）
 function stripHtml(s) {
   if (!s) return "";
@@ -1000,13 +1017,32 @@ function renderItemRow(i, num, dispName) {
   const vis = visitedSet.has(i.url) ? " visited" : "";
 
   // 简介：来自 RSS description 写入的 extra.summary；GitHub Trending 用 extra.desc 兜底
+  // 渲染时再做一次与标题的去重（feed_scraper 写入时已去过，这里兜底覆盖 GitHub 等"desc ≠ summary" 源）
+  // 判定规则：完全相等 / 短边包含于长边（短≥20）/ SequenceMatcher 比例 ≥ 0.72（前三档）
   let summaryCell = "";
   const rawSummary = (i.extra && (i.extra.summary || i.extra.desc)) || "";
   if (rawSummary) {
     const cleaned = stripHtml(rawSummary);
-    if (cleaned && cleaned !== i.title) {
-      const truncated = cleaned.length > 140 ? cleaned.slice(0, 140) + "…" : cleaned;
-      summaryCell = '<div class="summary">' + escapeHtml(truncated) + '</div>';
+    const titleNorm = String(i.title || "").replace(/\s+/g, " ").trim();
+    const cleanedNorm = cleaned.replace(/\s+/g, " ").trim();
+    let isDup = false;
+    if (!cleanedNorm) {
+      isDup = true;
+    } else if (cleanedNorm === titleNorm) {
+      isDup = true;
+    } else {
+      const [s, l] = cleanedNorm.length <= titleNorm.length ? [cleanedNorm, titleNorm] : [titleNorm, cleanedNorm];
+      if (s.length >= 20 && l.indexOf(s) >= 0) {
+        isDup = true;
+      } else {
+        // SequenceMatcher 比例相似度（>= 0.72 视为重复）
+        const ratio = smRatio(cleanedNorm, titleNorm);
+        if (ratio >= 0.72) isDup = true;
+      }
+    }
+    if (!isDup) {
+      const truncated = cleanedNorm.length > 140 ? cleanedNorm.slice(0, 140) + "…" : cleanedNorm;
+      summaryCell = '<div class="summary" title="' + escapeHtml(cleanedNorm) + '">' + escapeHtml(truncated) + '</div>';
     }
   }
 
