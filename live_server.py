@@ -142,6 +142,7 @@ class Collector:
             "url": it.url,
             "published": it.published,
             "extra": it.extra or {},
+            "comment": getattr(it, "comment", "") or "",
             "first_seen": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
 
@@ -328,6 +329,36 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 pass
 
+    def do_POST(self):  # noqa: N802
+        """接收「我的点评」写入请求（/api/comment）。"""
+        path = urlparse(self.path).path
+        if path != "/api/comment":
+            self._send(404, b"not found", "text/plain")
+            return
+        try:
+            length = int(self.headers.get("Content-Length", 0) or 0)
+            raw = self.rfile.read(length) if length else b"{}"
+            data = json.loads(raw.decode("utf-8") or "{}")
+            source_id = str(data.get("source_id", "")).strip()
+            url = str(data.get("url", "")).strip()
+            comment = str(data.get("comment", ""))[:500]
+            if not source_id or not url:
+                self._send_json({"ok": False, "error": "source_id 与 url 必填"})
+                return
+            # day 使用服务端北京时间，避免客户端篡改归属日期
+            day = today_bj()
+            conn = storage.get_conn()
+            try:
+                n = storage.update_comment(conn, day, source_id, url, comment)
+            finally:
+                conn.close()
+            self._send_json({"ok": True, "updated": n})
+        except Exception as e:  # 防止单个请求崩掉服务
+            try:
+                self._send_json({"ok": False, "error": str(e)[:200]})
+            except Exception:
+                pass
+
     def _handle_sse(self) -> None:
         """Server-Sent Events：保持连接，新条目入库即推送（默认 HTTP/1.0 流式）。"""
         self.send_response(200)
@@ -491,25 +522,26 @@ main { max-width: 100%; margin: 0; padding: 14px 20px 60px; }
 .src-logo.reuters { height: 20px; padding: 1px 6px; background: #fff; border: 1px solid #f5e0d8; border-radius: 4px; box-sizing: content-box; }
 
 /* ── 第 2 行：标题 + 简介（单行截断，避免窄屏换行成多行） ── */
-.item .row2 { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.item .row2 { display: block; min-width: 0; }
 .item .title {
   color: var(--text); text-decoration: none;
   font-size: 14.5px; font-weight: 600; line-height: 1.5;
-  flex: 1 1 0; min-width: 0;
-  /* 标题单行：超过卡片宽度显示省略号（用户偏好"不要换行显示"） */
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   display: block;
+  /* 标题单行：超过卡片宽度显示省略号（用户偏好"不要换行显示"）
+     注意：不能用 flex:1 1 0 —— 那会让 title 在 row2 里被压成 0 高度塌陷 */
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%;
 }
 .item .title:hover { color: var(--accent); text-decoration: underline; }
 .item .title.visited { color: #9ca3af; }
 .item .title.visited:hover { color: var(--accent); text-decoration: underline; }
-/* 简介：1 行截断（与标题一致不换行，避免视觉过长）。
-   真正想看完整内容可点击标题进源站。 */
+/* 简介：单行截断 */
 .item .summary {
   font-size: 12.5px; line-height: 1.55; color: #64748b;
   font-weight: 400;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   display: block;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%;
 }
 /* ===== 属性过滤器：Boss 直聘风格行式筛选器 =====
    布局：每个属性维度占一行，左侧属性名 + 右侧 pill 列表
@@ -567,6 +599,37 @@ main { max-width: 100%; margin: 0; padding: 14px 20px 60px; }
 .src-link .arrow { font-size: 11px; opacity: .55; }
 footer { text-align: center; color: var(--text-muted); font-size: 12px; padding: 20px; }
 #statusbar { font-size: 12px; color: var(--text-muted); }
+/* ===== 「我的点评」块（运营者人工撰写，区别于抓取内容）===== */
+.item .row3 { margin-top: 3px; }
+.comment-box { font-size: 12.5px; }
+.comment-view {
+  display: flex; align-items: flex-start; gap: 6px;
+  background: #fffbeb; border-left: 3px solid #f0b849;
+  border-radius: 0 6px 6px 0; padding: 6px 10px;
+}
+.cmt-label { font-weight: 700; color: #b45309; flex-shrink: 0; }
+.cmt-text { color: #78350f; flex: 1; line-height: 1.5; word-break: break-word; }
+.cmt-btn {
+  border: 1px solid #e7ecf5; background: #fff; color: #64748b;
+  font-size: 12px; border-radius: 6px; padding: 2px 10px; cursor: pointer;
+  white-space: nowrap; flex-shrink: 0;
+}
+.cmt-btn:hover { border-color: #ff7d39; color: #ff7d39; }
+.cmt-add { margin-top: 2px; }
+.cmt-input {
+  width: 100%; border: 1px solid #f0b849; border-radius: 6px;
+  padding: 6px 8px; font: inherit; font-size: 12.5px; line-height: 1.5;
+  resize: vertical; box-sizing: border-box;
+}
+.cmt-actions { margin-top: 4px; display: flex; gap: 6px; }
+.cmt-save {
+  background: #ff7d39; color: #fff; border: none; border-radius: 6px;
+  padding: 3px 14px; cursor: pointer; font-size: 12px; font-weight: 600;
+}
+.cmt-cancel {
+  background: #fff; border: 1px solid #e7ecf5; color: #64748b;
+  border-radius: 6px; padding: 3px 14px; cursor: pointer; font-size: 12px;
+}
 </style>
 </head>
 <body>
@@ -1061,6 +1124,7 @@ function renderItemRow(i, num, dispName) {
     '<a class="title' + vis + '" href="' + i.url + '" target="_blank" rel="noopener">' + escapeHtml(i.title) + '</a>' +
     summaryCell +
     '</div>' +
+    '<div class="row3">' + renderCommentBlock(i) + '</div>' +
     '</div>';
 }
 
@@ -1140,6 +1204,88 @@ function render(nowStr) {
 }
 
 const IS_STATIC = !!window.__STATIC__;
+
+// ===== 「我的点评」功能（运营者人工撰写，存 DB，区别于抓取内容）=====
+// url -> item 映射，供点评编辑时取 source_id 与回填
+let itemByUrl = {};
+
+// 找到对应 .item 元素（避免 CSS 属性选择器对特殊字符 URL 的转义问题）
+function findItemEl(url) {
+  for (const el of document.querySelectorAll(".item")) {
+    if (el.dataset.url === url) return el;
+  }
+  return null;
+}
+
+// 渲染单条点评展示块（有则显示，无则显示「写点评」按钮）
+function renderCommentBlock(it) {
+  const c = (it.comment || "").trim();
+  if (c) {
+    return '<div class="comment-view">' +
+      '<span class="cmt-label">点评</span>' +
+      '<span class="cmt-text">' + escapeHtml(c) + '</span>' +
+      '<button class="cmt-btn" data-act="edit" data-url="' + escapeHtml(it.url) + '">编辑</button>' +
+      '</div>';
+  }
+  return '<button class="cmt-btn cmt-add" data-act="add" data-url="' + escapeHtml(it.url) + '">➕ 写点评</button>';
+}
+
+// 就地展开编辑框
+function openCommentEditor(url) {
+  const it = itemByUrl[url];
+  if (!it) return;
+  const el = findItemEl(url);
+  if (!el) return;
+  const box = el.querySelector(".comment-box");
+  if (!box) return;
+  const cur = it.comment || "";
+  box.innerHTML =
+    '<textarea class="cmt-input" rows="2" placeholder="写下你的点评（摘要 + 链接 + 你的判断，别搬运正文）…">' +
+    escapeHtml(cur) + '</textarea>' +
+    '<div class="cmt-actions">' +
+    '<button class="cmt-save" data-act="save" data-url="' + escapeHtml(url) + '">保存</button>' +
+    '<button class="cmt-cancel" data-act="cancel" data-url="' + escapeHtml(url) + '">取消</button>' +
+    '</div>';
+  const ta = box.querySelector("textarea");
+  if (ta) ta.focus();
+}
+
+// 保存点评到服务端
+async function saveComment(url) {
+  const it = itemByUrl[url];
+  const el = findItemEl(url);
+  if (!it || !el) return;
+  const box = el.querySelector(".comment-box");
+  const ta = box.querySelector("textarea");
+  const text = ta ? ta.value : "";
+  try {
+    const res = await fetch("/api/comment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source_id: it.source_id, url: url, comment: text }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || "保存失败");
+    it.comment = text;
+    box.innerHTML = renderCommentBlock(it);
+  } catch (e) {
+    alert("点评保存失败：" + (e.message || e));
+  }
+}
+
+// 「我的点评」按钮事件委托（写 / 编辑 / 保存 / 取消）
+document.getElementById("list").addEventListener("click", (e) => {
+  const btn = e.target.closest("[data-act]");
+  if (!btn) return;
+  const act = btn.dataset.act, url = btn.dataset.url;
+  if (act === "add" || act === "edit") openCommentEditor(url);
+  else if (act === "save") saveComment(url);
+  else if (act === "cancel") {
+    const it = itemByUrl[url];
+    const el = findItemEl(url);
+    if (el && it) el.querySelector(".comment-box").innerHTML = renderCommentBlock(it);
+  }
+});
 
 function escapeHtml(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
