@@ -625,6 +625,9 @@ footer { text-align: center; color: var(--text-muted); font-size: 12px; padding:
 }
 .cmt-btn:hover { border-color: #ff7d39; color: #ff7d39; }
 .cmt-action { flex-shrink: 0; margin-left: 6px; }
+.cmt-readonly { font-size: 12px; color: #94a3b8; font-weight: 500; }
+.cmt-readonly-hint { font-size: 12.5px; line-height: 1.5; color: #64748b; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 10px; margin-top: 4px; }
+.cmt-readonly-hint code { background: #eef2f7; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
 .cmt-input {
   width: 100%; border: 1px solid #f0b849; border-radius: 6px;
   padding: 6px 8px; font: inherit; font-size: 12.5px; line-height: 1.5;
@@ -679,7 +682,7 @@ let day = "";
 // 把 published 转换成"距今多久"的相对时间（如"3 分钟前"），仅用于非人民日报条目
 function relTime(published) {
   if (!published) return "";
-  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/.exec(published);
+  const m = /^([0-9]{4})-([0-9]{2})-([0-9]{2})[ T]([0-9]{2}):([0-9]{2})/.exec(published);
   if (!m) return "";
   const ts = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).getTime();
   const diffMin = Math.max(0, Math.floor((Date.now() - ts) / 60000));
@@ -958,7 +961,7 @@ function bindAttrFilter() {
 function fmtStars(n) {
   if (typeof n !== "number" || isNaN(n)) return "";
   if (n < 1000) return String(n);
-  if (n < 10000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+  if (n < 10000) return (n / 1000).toFixed(1).replace(/[.]0$/, "") + "k";
   return Math.floor(n / 1000) + "k";
 }
 
@@ -995,18 +998,18 @@ function stripHtml(s) {
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
-    .replace(/\s+/g, " ")
+    .replace(/[ \t\r\n\f\v]+/g, " ")
     .trim();
 }
 
 // 解析「N 分钟前」「N 小时前」「N 天前」→ 分钟数（用于色阶）；不认识返回 -1
 function relToMin(rel) {
   if (!rel) return -1;
-  const m1 = /^(\d+) 分钟前$/.exec(rel);
+  const m1 = /^([0-9]+) 分钟前$/.exec(rel);
   if (m1) return parseInt(m1[1], 10);
-  const m2 = /^(\d+) 小时前$/.exec(rel);
+  const m2 = /^([0-9]+) 小时前$/.exec(rel);
   if (m2) return parseInt(m2[1], 10) * 60;
-  const m3 = /^(\d+) 天前$/.exec(rel);
+  const m3 = /^([0-9]+) 天前$/.exec(rel);
   if (m3) return parseInt(m3[1], 10) * 1440;
   if (rel === "刚刚") return 0;
   return -1;
@@ -1070,7 +1073,7 @@ function renderItemRow(i, num, dispName) {
       : "";
     let todayFmt = "";
     if (today) {
-      const mm = today.match(/^([\d,]+)\s+stars?\s+(today|this week|this month)/i);
+      const mm = today.match(/^([0-9,]+)[ ]+stars?[ ]+(today|this week|this month)/i);
       if (mm) {
         todayFmt = '<span class="badge stars">+ ' + escapeHtml(fmtStars(parseInt(mm[1].replace(/,/g, "")))) + ' today</span>';
       }
@@ -1097,8 +1100,8 @@ function renderItemRow(i, num, dispName) {
   const rawSummary = (i.extra && (i.extra.summary || i.extra.desc)) || "";
   if (rawSummary) {
     const cleaned = stripHtml(rawSummary);
-    const titleNorm = String(i.title || "").replace(/\s+/g, " ").trim();
-    const cleanedNorm = cleaned.replace(/\s+/g, " ").trim();
+    const titleNorm = String(i.title || "").replace(/[ \t\r\n\f\v]+/g, " ").trim();
+    const cleanedNorm = cleaned.replace(/[ \t\r\n\f\v]+/g, " ").trim();
     let isDup = false;
     if (!cleanedNorm) {
       isDup = true;
@@ -1219,6 +1222,8 @@ const IS_STATIC = !!window.__STATIC__;
 // ===== 「我的点评」功能（运营者人工撰写，存 DB，区别于抓取内容）=====
 // url -> item 映射，供点评编辑时取 source_id 与回填
 let itemByUrl = {};
+// 静态构建（GitHub Pages）无后端，标记只读：禁用写/编辑，点击给提示
+const READONLY = !!window.__STATIC__;
 
 // 找到对应 .item 元素（避免 CSS 属性选择器对特殊字符 URL 的转义问题）
 function findItemEl(url) {
@@ -1228,8 +1233,9 @@ function findItemEl(url) {
   return null;
 }
 
-// 标题行右侧动作按钮：无评论=写点评，有评论=编辑
+// 标题行右侧动作按钮：无评论=写点评，有评论=编辑（只读静态版显示「只读」标签）
 function renderCommentAction(it) {
+  if (READONLY) return '<span class="cmt-readonly">只读</span>';
   const c = (it.comment || "").trim();
   if (c) {
     return '<button class="cmt-btn" data-act="edit" data-url="' + escapeHtml(it.url) + '">编辑</button>';
@@ -1241,15 +1247,25 @@ function renderCommentAction(it) {
 function renderCommentBlock(it) {
   const c = (it.comment || "").trim();
   if (!c) return "";
+  const editBtn = READONLY ? "" :
+    '<button class="cmt-btn" data-act="edit" data-url="' + escapeHtml(it.url) + '">编辑</button>';
   return '<div class="comment-view">' +
     '<span class="cmt-label">点评</span>' +
     '<span class="cmt-text">' + escapeHtml(c) + '</span>' +
-    '<button class="cmt-btn" data-act="edit" data-url="' + escapeHtml(it.url) + '">编辑</button>' +
+    editBtn +
     '</div>';
 }
 
 // 就地展开编辑框
 function openCommentEditor(url) {
+  if (READONLY) {
+    const el = findItemEl(url);
+    if (!el) return;
+    const box = el.querySelector(".comment-box");
+    if (!box) return;
+    box.innerHTML = '<div class="cmt-readonly-hint">当前为<strong>只读静态站点</strong>，无法保存点评。请本地运行 <code>python live_server.py</code> 后访问 <b>http://127.0.0.1:8765</b>（带后端）写入。</div>';
+    return;
+  }
   const it = itemByUrl[url];
   if (!it) return;
   const el = findItemEl(url);
@@ -1282,8 +1298,16 @@ async function saveComment(url) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ source_id: it.source_id, url: url, comment: text }),
     });
-    const data = await res.json();
-    if (!res.ok || !data.ok) throw new Error(data.error || "保存失败");
+    let data = {};
+    try { data = await res.json(); } catch (e) { data = {}; }
+    if (!res.ok || !data.ok) {
+      let msg = data.error || "";
+      if (!msg) {
+        if (res.status === 404) msg = "当前站点没有后端，无法保存。请在本地运行 live_server.py 后访问 http://127.0.0.1:8765 写入。";
+        else msg = "保存失败（HTTP " + res.status + "）";
+      }
+      throw new Error(msg);
+    }
     it.comment = text;
     box.innerHTML = renderCommentBlock(it);
     const action = el.querySelector(".cmt-action");
