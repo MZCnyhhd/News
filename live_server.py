@@ -624,7 +624,7 @@ footer { text-align: center; color: var(--text-muted); font-size: 12px; padding:
   white-space: nowrap; flex-shrink: 0;
 }
 .cmt-btn:hover { border-color: #ff7d39; color: #ff7d39; }
-.cmt-add { margin-top: 2px; }
+.cmt-action { flex-shrink: 0; margin-left: 6px; }
 .cmt-input {
   width: 100%; border: 1px solid #f0b849; border-radius: 6px;
   padding: 6px 8px; font: inherit; font-size: 12.5px; line-height: 1.5;
@@ -1131,9 +1131,10 @@ function renderItemRow(i, num, dispName) {
     starsCell +
     '</div>' +
     '<a class="title' + vis + '" href="' + i.url + '" target="_blank" rel="noopener">' + escapeHtml(i.title) + '</a>' +
+    '<span class="cmt-action">' + renderCommentAction(i) + '</span>' +
     '</div>' +
     '<div class="row2">' + summaryCell + '</div>' +
-    '<div class="row3">' + renderCommentBlock(i) + '</div>' +
+    '<div class="row3"><div class="comment-box">' + renderCommentBlock(i) + '</div></div>' +
     '</div>';
 }
 
@@ -1227,17 +1228,24 @@ function findItemEl(url) {
   return null;
 }
 
-// 渲染单条点评展示块（有则显示，无则显示「写点评」按钮）
-function renderCommentBlock(it) {
+// 标题行右侧动作按钮：无评论=写点评，有评论=编辑
+function renderCommentAction(it) {
   const c = (it.comment || "").trim();
   if (c) {
-    return '<div class="comment-view">' +
-      '<span class="cmt-label">点评</span>' +
-      '<span class="cmt-text">' + escapeHtml(c) + '</span>' +
-      '<button class="cmt-btn" data-act="edit" data-url="' + escapeHtml(it.url) + '">编辑</button>' +
-      '</div>';
+    return '<button class="cmt-btn" data-act="edit" data-url="' + escapeHtml(it.url) + '">编辑</button>';
   }
   return '<button class="cmt-btn cmt-add" data-act="add" data-url="' + escapeHtml(it.url) + '">➕ 写点评</button>';
+}
+
+// 渲染单条点评展示块（有则显示，无则留空；编辑框将注入 .comment-box）
+function renderCommentBlock(it) {
+  const c = (it.comment || "").trim();
+  if (!c) return "";
+  return '<div class="comment-view">' +
+    '<span class="cmt-label">点评</span>' +
+    '<span class="cmt-text">' + escapeHtml(c) + '</span>' +
+    '<button class="cmt-btn" data-act="edit" data-url="' + escapeHtml(it.url) + '">编辑</button>' +
+    '</div>';
 }
 
 // 就地展开编辑框
@@ -1278,6 +1286,8 @@ async function saveComment(url) {
     if (!res.ok || !data.ok) throw new Error(data.error || "保存失败");
     it.comment = text;
     box.innerHTML = renderCommentBlock(it);
+    const action = el.querySelector(".cmt-action");
+    if (action) action.innerHTML = renderCommentAction(it);
   } catch (e) {
     alert("点评保存失败：" + (e.message || e));
   }
@@ -1293,7 +1303,12 @@ document.getElementById("list").addEventListener("click", (e) => {
   else if (act === "cancel") {
     const it = itemByUrl[url];
     const el = findItemEl(url);
-    if (el && it) el.querySelector(".comment-box").innerHTML = renderCommentBlock(it);
+    if (el && it) {
+      const box = el.querySelector(".comment-box");
+      if (box) box.innerHTML = renderCommentBlock(it);
+      const action = el.querySelector(".cmt-action");
+      if (action) action.innerHTML = renderCommentAction(it);
+    }
   }
 });
 
@@ -1562,6 +1577,15 @@ li a:hover { color: #ff7d39; }
                         border-radius: 999px; padding: 1px 8px; min-width: 20px; text-align: center; }
 .brand-block ol { padding-left: 22px; margin: 0; }
 .brand-block li { margin: 9px 0; }
+/* 人民日报要闻：按版面号分组（01版：要闻 在上，07版：要闻 在下） */
+.pd-block { margin: 16px 0 4px; }
+.pd-block h4 { font-size: 13.5px; margin: 0 0 8px; padding: 6px 12px; color: #1e293b;
+               background: linear-gradient(180deg, #ffffff, #fbfcfd); border: 1px solid #f0e2e2;
+               border-left: 3px solid #c0392b; border-radius: 8px; display: flex; align-items: center; gap: 8px; }
+.pd-block h4 .bcnt { font-size: 11px; font-weight: 700; color: #fff; background: #c0392b;
+                     border-radius: 999px; padding: 1px 8px; min-width: 20px; text-align: center; }
+.pd-block ol { padding-left: 22px; margin: 0; }
+.pd-block li { margin: 9px 0; }
 /* 简易版 view-switcher：与主看板一致风格（橙色胶囊，左label右tabs）
    全量版 view-switcher 在 .attr-filter 顶部绝对定位（label-left tabs-right）；
    简易版无 attr-filter 容器，靠自身 style 模拟等同布局 */
@@ -1627,7 +1651,7 @@ def _escape(s) -> str:
     return html_module.escape(str(s))
 
 
-def _render_simple_section(items: list[dict], *, with_thumb: bool = False) -> str:
+def _render_simple_section(items: list[dict], *, with_thumb: bool = False, show_sec: bool = True) -> str:
     """渲染简易版单个分区为 <ol><li>...</li></ol>；空集合返回提示。"""
     if not items:
         return '<div class="empty-msg">今日暂无收录</div>'
@@ -1642,7 +1666,7 @@ def _render_simple_section(items: list[dict], *, with_thumb: bool = False) -> st
         src = _escape(it.get("source_name") or it.get("source_id") or "")
         extra = it.get("extra") or {}
         sec_label = extra.get("section") or ""
-        sec_html = f'<span class="sec">{_escape(sec_label)}</span>' if sec_label else ""
+        sec_html = f'<span class="sec">{_escape(sec_label)}</span>' if (show_sec and sec_label) else ""
         thumb_html = ""
         if with_thumb and extra.get("image"):
             thumb_html = f'<img class="thumb" src="{_escape(extra["image"])}" loading="lazy" alt="">'
@@ -1685,6 +1709,36 @@ def _render_simple_tech(items: list[dict]) -> str:
     return "".join(blocks) if blocks else '<div class="empty-msg">今日暂无收录</div>'
 
 
+def _sec_num(sec_name: str) -> int:
+    """从 '01版：要闻' 提取版号 1；解析失败返回 999（沉到最底）。"""
+    m = re.match(r"(\d+)\s*版", sec_name or "")
+    return int(m.group(1)) if m else 999
+
+
+def _render_simple_people(items: list[dict]) -> str:
+    """人民日报要闻：按版面号（01→07）从上到下分组，每组一个小标题 + 该版文章列表。
+    组内按发布时间倒序；版面按版号升序（01 在上、07 在下），满足"从上到下排列"诉求。
+    """
+    if not items:
+        return '<div class="empty-msg">今日暂无收录</div>'
+    groups: dict[int, list[dict]] = {}
+    for it in items:
+        sec = (it.get("extra") or {}).get("section") or ""
+        groups.setdefault(_sec_num(sec), []).append(it)
+    blocks: list[str] = []
+    for num in sorted(groups.keys()):
+        subset = groups[num]
+        subset.sort(key=lambda x: (x.get("published") or ""), reverse=True)
+        sec_label = (subset[0].get("extra") or {}).get("section") or f"{num:02d}版：要闻"
+        blocks.append(
+            '<div class="pd-block">'
+            f'<h4>{_escape(sec_label)}<span class="bcnt">{len(subset)}</span></h4>'
+            + _render_simple_section(subset, show_sec=False)
+            + '</div>'
+        )
+    return "".join(blocks) if blocks else '<div class="empty-msg">今日暂无收录</div>'
+
+
 def _filter_simple(items: list[dict]) -> tuple[list[dict], list[dict], list[dict]]:
     """按 3 块精要切分条目：
     - 人民日报 仅 要闻版面（section 以 "要闻" 结尾）
@@ -1722,7 +1776,7 @@ def build_simple_html(items: list[dict], day_str: str) -> str:
         .replace("__N1__", str(len(sec1)))
         .replace("__N2__", str(len(sec2)))
         .replace("__N3__", str(len(sec3)))
-        .replace("__SEC1__", _render_simple_section(sec1))
+        .replace("__SEC1__", _render_simple_people(sec1))
         .replace("__SEC2__", _render_simple_section(sec2, with_thumb=True))
         .replace("__SEC3__", _render_simple_tech(sec3))
         .replace("__VIEW_SWITCHER__",
