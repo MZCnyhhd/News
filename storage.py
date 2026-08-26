@@ -52,6 +52,10 @@ def get_conn(db_path: Path | None = None) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(_SCHEMA)
+    # 增量迁移：确保 comment（我的点评）列存在，兼容旧库已有数据
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(items)")}
+    if "comment" not in cols:
+        conn.execute("ALTER TABLE items ADD COLUMN comment TEXT NOT NULL DEFAULT ''")
     return conn
 
 
@@ -69,8 +73,8 @@ def upsert_items(
             cur = conn.execute(
                 """INSERT OR IGNORE INTO items
                    (day, source_id, source_name, category, subcategory,
-                    title, url, published, extra_json, first_seen)
-                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                    title, url, published, extra_json, first_seen, comment)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     day,
                     source.id,
@@ -82,6 +86,7 @@ def upsert_items(
                     it.published,
                     json.dumps(it.extra or {}, ensure_ascii=False),
                     now,
+                    getattr(it, "comment", "") or "",
                 ),
             )
             if cur.rowcount:
@@ -98,11 +103,18 @@ def replace_source_items(
     """整体替换某源当天条目（用于榜单/Trending 这类快照型源）。返回条数。"""
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with conn:
-        # 保留原 first_seen：先取已有 url -> first_seen 映射
+        # 保留原 first_seen 与 comment：先取已有 url -> first_seen / comment 映射
         old = {
             row["url"]: row["first_seen"]
             for row in conn.execute(
                 "SELECT url, first_seen FROM items WHERE day=? AND source_id=?",
+                (day, source.id),
+            )
+        }
+        old_comment = {
+            row["url"]: row["comment"]
+            for row in conn.execute(
+                "SELECT url, comment FROM items WHERE day=? AND source_id=?",
                 (day, source.id),
             )
         }
@@ -113,8 +125,8 @@ def replace_source_items(
             conn.execute(
                 """INSERT OR IGNORE INTO items
                    (day, source_id, source_name, category, subcategory,
-                    title, url, published, extra_json, first_seen)
-                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                    title, url, published, extra_json, first_seen, comment)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
                 (
                     day,
                     source.id,
@@ -126,6 +138,7 @@ def replace_source_items(
                     it.published,
                     json.dumps(it.extra or {}, ensure_ascii=False),
                     old.get(it.url, now),
+                    old_comment.get(it.url, "") or "",
                 ),
             )
     return len(items)
@@ -135,7 +148,7 @@ def get_items(conn: sqlite3.Connection, day: str) -> list[dict]:
     """取某天全部条目（按入库时间倒序）。"""
     rows = conn.execute(
         """SELECT day, source_id, source_name, category, subcategory,
-                  title, url, published, extra_json, first_seen
+                  title, url, published, extra_json, first_seen, comment
            FROM items WHERE day=? ORDER BY first_seen DESC, id DESC""",
         (day,),
     ).fetchall()
@@ -146,6 +159,8 @@ def get_items(conn: sqlite3.Connection, day: str) -> list[dict]:
             d["extra"] = json.loads(d.pop("extra_json") or "{}")
         except (json.JSONDecodeError, TypeError):
             d["extra"] = {}
+        if "comment" not in d:
+            d["comment"] = ""
         result.append(d)
     return result
 
@@ -153,3 +168,23 @@ def get_items(conn: sqlite3.Connection, day: str) -> list[dict]:
 def count_items(conn: sqlite3.Connection, day: str) -> int:
     row = conn.execute("SELECT COUNT(*) AS c FROM items WHERE day=?", (day,)).fetchone()
     return row["c"] if row else 0
+
+
+def update_comment(
+    conn: sqlite3.Connection,
+    day: str,
+    source_id: str,
+    url: str,
+    comment: str,
+) -> int:
+    """写入/更新某条新闻的「我的点评」（运营者人工撰写）。
+
+    按 (day, source_id, url) 精确定位条目，与抓取去重键一致。
+    返回受影响行数（0 表示未找到该条目）。
+    """
+    with conn:
+        cur = conn.execute(
+            "UPDATE items SET comment=? WHERE day=? AND source_id=? AND url=?",
+            (comment or "", day, source_id, url),
+        )
+    return cur.rowcount

@@ -441,12 +441,13 @@ header h1 { font-size: 17px; font-weight: 700; }
 .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .tab .cnt { opacity: .75; font-size: 11.5px; margin-left: 3px; }
 main { max-width: 100%; margin: 0; padding: 14px 20px 60px; }
-/* ====== 列表项：两行布局（2026-08-25 UI 美化） ======
-   row1：编号 + 倒计时 + 日期 + 来源 + 板块
-   row2：标题 + 简介（可选，来自 RSS description）
+/* ====== 列表项（2026-08-26 调整）：top-row + 可选 summary =====
+   top：row1（元数据条）+ title（同行右侧，flex:1 占剩余空间 + ellipsis）
+   row2：summary（可选，单行截断）
+   row3：点评块
 */
 .item {
-  display: flex; flex-direction: column; gap: 6px;
+  display: flex; flex-direction: column; gap: 4px;
   background: #fff;
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -456,13 +457,19 @@ main { max-width: 100%; margin: 0; padding: 14px 20px 60px; }
 }
 .item:hover { border-color: #d8e1f1; box-shadow: 0 1px 4px rgba(60,90,150,.06); }
 
-/* ── 第 1 行：元数据条 ── */
+/* ── top 行：row1（meta）+ title 横排同一行 ── */
+.item .top {
+  display: flex; align-items: center; gap: 12px;
+  min-width: 0;
+}
+
+/* ── 第 1 段：元数据条（在 top 内左半区；窄屏可被压缩） ── */
 .item .row1 {
   display: flex; align-items: center; gap: 8px;
   font-size: 12px; line-height: 1.4; color: var(--text-muted);
-  /* 允许换行：窄屏 row1 子项会自动换行，row2 标题仍在 row1 下方不被挤掉。
-     子项仍保持 white-space: nowrap（文字内不换行），仅在容器边界换项。 */
-  flex-wrap: wrap;
+  flex-shrink: 1; min-width: 0;
+  /* 内容超出按 row1 容器裁掉（窄屏 row1 子项不会被挤下去，而是被裁） */
+  overflow: hidden;
 }
 .item .row1 > * { white-space: nowrap; flex-shrink: 0; }
 
@@ -521,20 +528,22 @@ main { max-width: 100%; margin: 0; padding: 14px 20px 60px; }
 .src-logo.mit { height: 20px; padding: 1px 6px; background: #000; border-radius: 4px; box-sizing: content-box; }
 .src-logo.reuters { height: 20px; padding: 1px 6px; background: #fff; border: 1px solid #f5e0d8; border-radius: 4px; box-sizing: content-box; }
 
-/* ── 第 2 行：标题 + 简介（单行截断，避免窄屏换行成多行） ── */
-.item .row2 { display: block; min-width: 0; }
+/* ── title：占满 top 剩余空间，单行截断 ──
+   用户要求：标题与元数据条显示在同一行 */
 .item .title {
   color: var(--text); text-decoration: none;
   font-size: 14.5px; font-weight: 600; line-height: 1.5;
   display: block;
-  /* 标题单行：超过卡片宽度显示省略号（用户偏好"不要换行显示"）
-     注意：不能用 flex:1 1 0 —— 那会让 title 在 row2 里被压成 0 高度塌陷 */
+  flex: 1 1 auto; min-width: 0;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   max-width: 100%;
 }
 .item .title:hover { color: var(--accent); text-decoration: underline; }
 .item .title.visited { color: #9ca3af; }
 .item .title.visited:hover { color: var(--accent); text-decoration: underline; }
+
+/* ── row2：简介（可选，单行截断） ── */
+.item .row2 { min-width: 0; }
 /* 简介：单行截断 */
 .item .summary {
   font-size: 12.5px; line-height: 1.55; color: #64748b;
@@ -1112,6 +1121,7 @@ function renderItemRow(i, num, dispName) {
   }
 
   return '<div class="item" data-url="' + escapeHtml(i.url) + '">' +
+    '<div class="top">' +
     '<div class="row1">' +
     '<span class="' + numCls + '">' + num + '</span>' +
     timeBlock +
@@ -1120,10 +1130,9 @@ function renderItemRow(i, num, dispName) {
     subCell +
     starsCell +
     '</div>' +
-    '<div class="row2">' +
     '<a class="title' + vis + '" href="' + i.url + '" target="_blank" rel="noopener">' + escapeHtml(i.title) + '</a>' +
-    summaryCell +
     '</div>' +
+    '<div class="row2">' + summaryCell + '</div>' +
     '<div class="row3">' + renderCommentBlock(i) + '</div>' +
     '</div>';
 }
@@ -1180,6 +1189,7 @@ function renderItemsArea(visibleItems, filterIdsForEmpty) {
 
 function render(nowStr) {
   const list = document.getElementById("list");
+  for (const i of cachedItems) itemByUrl[i.url] = i;
   let visibleItems = cachedItems.slice();
   if (activeSourceIds) {
     const set = new Set(activeSourceIds);
@@ -1385,6 +1395,7 @@ if (!IS_STATIC) {
       if (seenUrls.has(item.url)) return;
       seenUrls.add(item.url);
       cachedItems.unshift(item);
+      itemByUrl[item.url] = item;
       lastNow = item.first_seen;
       applyStatus(); refreshView();
     } catch (err) {}
@@ -1572,6 +1583,11 @@ li a:hover { color: #ff7d39; }
 footer { color: #94a3b8; font-size: 11.5px; text-align: center;
          margin-top: 56px; padding-top: 16px; border-top: 1px solid #f1f5f9; }
 footer a { color: #94a3b8; }
+/* 我的点评：精简版差异化标记，橙色左条 + 暖底，区别于官方标题 */
+.my-note { margin: 5px 0 2px; padding: 5px 10px; background: #fff8f3;
+          border-left: 3px solid #ff7d39; border-radius: 0 6px 6px 0;
+          font-size: 12.5px; line-height: 1.5; color: #8a4b1f; }
+.my-note .note-label { font-weight: 700; color: #ff7d39; margin-right: 5px; }
 </style>
 </head>
 <body>
@@ -1630,6 +1646,11 @@ def _render_simple_section(items: list[dict], *, with_thumb: bool = False) -> st
         thumb_html = ""
         if with_thumb and extra.get("image"):
             thumb_html = f'<img class="thumb" src="{_escape(extra["image"])}" loading="lazy" alt="">'
+        comment = (it.get("comment") or "").strip()
+        note_html = ""
+        if comment:
+            note = _escape(comment).replace("\n", "<br>")
+            note_html = f'<div class="my-note"><span class="note-label">我的点评</span>{note}</div>'
         lis.append(
             '<li>'
             f'<a href="{url}" target="_blank" rel="noopener">{title}</a>'
@@ -1637,6 +1658,7 @@ def _render_simple_section(items: list[dict], *, with_thumb: bool = False) -> st
             f'<span class="time">{time_str}</span>'
             f'<span class="src">{src}</span>'
             f'{sec_html}'
+            f'{note_html}'
             '</li>'
         )
     return f'<ol>{"".join(lis)}</ol>'

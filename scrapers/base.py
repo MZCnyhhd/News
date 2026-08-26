@@ -15,6 +15,7 @@ class NewsItem:
     published: Optional[str] = None  # 规范化后的展示字符串，如 "2026-07-23"
     source: str = ""  # 源显示名
     extra: dict = field(default_factory=dict)  # 可选：作者/分数/stars 等补充信息
+    comment: str = ""  # 「我的点评」：运营者人工撰写，默认空（抓取阶段不填）
 
 
 @dataclass
