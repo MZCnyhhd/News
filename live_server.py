@@ -441,37 +441,47 @@ header h1 { font-size: 17px; font-weight: 700; }
 .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .tab .cnt { opacity: .75; font-size: 11.5px; margin-left: 3px; }
 main { max-width: 100%; margin: 0; padding: 14px 20px 60px; }
-/* ====== 列表项（2026-08-26 调整）：top-row + 可选 summary =====
-   top：row1（元数据条）+ title（同行右侧，flex:1 占剩余空间 + ellipsis）
+/* ====== 列表项（2026-08-26 第三轮调整）：top-row + 可选 summary =====
+   top：row1（meta + thumb 可选）+ title（同行右侧，flex:1）+ cmt-action
    row2：summary（可选，单行截断）
    row3：点评块
+   视觉：去掉外边框（border），仅底部 1px 分隔线；卡片居中 max-width：720px
 */
 .item {
   display: flex; flex-direction: column; gap: 4px;
   background: #fff;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 14px 11px;
-  margin-bottom: 6px;
-  transition: border-color .12s ease, box-shadow .12s ease;
+  border: 0;
+  border-bottom: 1px solid #f1f5f9;
+  border-radius: 0;
+  padding: 9px 12px 10px;
+  margin: 0 auto 2px;            /* 居中 + 紧凑底部间距 */
+  max-width: 720px;              /* 卡片宽度收紧 */
+  transition: background .12s ease;
 }
-.item:hover { border-color: #d8e1f1; box-shadow: 0 1px 4px rgba(60,90,150,.06); }
+.item:hover { background: #fafbfd; }
 
-/* ── top 行：row1（meta）+ title 横排同一行 ── */
+/* ── top 行：row1（meta）+ title + cmt-action 横排同一行 ── */
 .item .top {
-  display: flex; align-items: center; gap: 12px;
+  display: flex; align-items: center; gap: 10px;
   min-width: 0;
 }
 
-/* ── 第 1 段：元数据条（在 top 内左半区；窄屏可被压缩） ── */
+/* ── 第 1 段：meta（元数据条 + 可选缩略图） ── */
 .item .row1 {
-  display: flex; align-items: center; gap: 8px;
+  display: flex; align-items: center; gap: 7px;
   font-size: 12px; line-height: 1.4; color: var(--text-muted);
   flex-shrink: 1; min-width: 0;
-  /* 内容超出按 row1 容器裁掉（窄屏 row1 子项不会被挤下去，而是被裁） */
   overflow: hidden;
 }
 .item .row1 > * { white-space: nowrap; flex-shrink: 0; }
+
+/* 绝对日期 + 时间：拆成两个独立字段（编号、日期、时间、媒体…） */
+.item .date, .item .time {
+  font-variant-numeric: tabular-nums;
+  color: #94a3b8; font-size: 11.5px;
+  white-space: nowrap;
+}
+.item .date { color: #64748b; font-weight: 600; }
 
 /* 编号：胶囊（顶部 10 条橙红渐变、11-30 琥珀色、其余浅灰） */
 .item .num {
@@ -541,6 +551,26 @@ main { max-width: 100%; margin: 0; padding: 14px 20px 60px; }
 .item .title:hover { color: var(--accent); text-decoration: underline; }
 .item .title.visited { color: #9ca3af; }
 .item .title.visited:hover { color: var(--accent); text-decoration: underline; }
+
+/* 缩略图（row1 末尾，可点击新窗口放大原图）：Reuters 等源 extra.image */
+.item .thumb-wrap {
+  display: inline-block; flex-shrink: 0;
+  line-height: 0;
+  border-radius: 5px;
+  overflow: hidden;
+  border: 1px solid #e3e8f2;
+  background: #f6f8fc;
+  transition: border-color .15s ease;
+}
+.item .thumb-wrap:hover { border-color: #ff7d39; }
+.item .thumb-wrap img {
+  display: block;
+  width: 64px; height: 40px;
+  object-fit: cover;
+  vertical-align: middle;
+  transition: transform .18s ease;
+}
+.item .thumb-wrap:hover img { transform: scale(1.06); }
 
 /* ── row2：简介（可选，单行截断） ── */
 .item .row2 { min-width: 0; }
@@ -998,7 +1028,7 @@ function stripHtml(s) {
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
-    .replace(/[ \t\r\n\f\v]+/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
 }
 
@@ -1015,26 +1045,21 @@ function relToMin(rel) {
   return -1;
 }
 
-// element 顺序：行 1 = [num]  [time-block]  [src-inline]  [sec]  [sub]  [stars]
-//                行 2 = [title]  [summary 可选]
+// element 顺序：行 1 = [num] [time:YYYY-MM-DD HH:MM] [src] [sec] [sub] [stars] [thumb 可选]
+//                行 2 = [title] [cmt-action]
+//                行 3 = summary
+//                行 4 = comment-box
 function renderItemRow(i, num, dispName) {
   // 兜底：部分源（GitHub Trending / HF Models）的 published 为空，用 first_seen 代替以保证时间始终显示
-  const pub = i.published || (i.first_seen ? i.first_seen.replace("T", " ").slice(0, 16) : "");
-  const rel = (i.source_id === "people_daily") ? "" : relTime(pub);
-  const pubStr = pub ? fmtPub({ ...i, published: pub }) : "";
+  const pub = i.published || (i.first_seen ? i.first_seen.replace("T", " ") : "");
+  // 日期 / 时间 拆成两个独立字段（用户要求：编号、日期、时间、媒体…）
+  const dateStr = pub ? pub.slice(0, 10) : "";
+  const timeStr = pub ? pub.slice(11, 16) : "";
 
   // 编号色阶：≤10 fresh（橙红）、11-30 warm（琥珀）、其余 浅灰
   let numCls = "num";
   if (num <= 10) numCls += " fresh";
   else if (num <= 30) numCls += " warm";
-
-  // 倒计时色阶：< 60min hot（红）、< 360min warm（橙）、其余默认
-  let relCls = "rel";
-  const m = relToMin(rel);
-  if (m >= 0) {
-    if (m < 60) relCls += " hot";
-    else if (m < 360) relCls += " warm";
-  }
 
   // 板块 class 映射（根据 section 名动态选色）
   let secCls = "badge sec";
@@ -1081,14 +1106,28 @@ function renderItemRow(i, num, dispName) {
     starsCell = totalFmt + todayFmt;
   }
 
-  // 紧凑时间块：「倒计时 · 日期」
-  const timeBlock = (rel || pubStr)
-    ? '<span class="time-block">' +
-      (rel ? '<span class="' + relCls + '">' + escapeHtml(rel) + '</span>' : "") +
-      (rel && pubStr ? '<span class="rel-dot">·</span>' : "") +
-      (pubStr ? '<span class="pub">' + escapeHtml(pubStr) + '</span>' : "") +
-      '</span>'
+  // 绝对日期 / 时间（两个独立字段）
+  const dateCell = dateStr
+    ? '<span class="date">' + escapeHtml(dateStr) + '</span>'
     : "";
+  const timeCell = timeStr
+    ? '<span class="time">' + escapeHtml(timeStr) + '</span>'
+    : "";
+
+  // 缩略图（row1 末尾，可点击放大）：Reuters 等源 extra.image 存在时显示
+  // onerror 隐藏失败图；点击在新窗口打开原图 = "单独放大"
+  let thumbCell = "";
+  const imageUrl = (i.extra && (i.extra.image || i.extra.thumb)) || "";
+  if (imageUrl) {
+    // 拼接 onerror 属性时不能用裸 'none'（JS 单引号字面量会提前闭合）。
+    // 用 '\\u0027' 让 Python 字面值保留 \u0027，JS 引擎再翻译成 '。
+    thumbCell =
+      '<a class="thumb-wrap" href="' + escapeHtml(imageUrl) +
+      '" target="_blank" rel="noopener" title="点击放大原图">' +
+      '<img class="thumb" src="' + escapeHtml(imageUrl) +
+      '" loading="lazy" alt="" onerror="this.parentNode.style.display=\\u0027none\\u0027">' +
+      '</a>';
+  }
 
   // 已访问标记
   const vis = visitedSet.has(i.url) ? " visited" : "";
@@ -1100,8 +1139,8 @@ function renderItemRow(i, num, dispName) {
   const rawSummary = (i.extra && (i.extra.summary || i.extra.desc)) || "";
   if (rawSummary) {
     const cleaned = stripHtml(rawSummary);
-    const titleNorm = String(i.title || "").replace(/[ \t\r\n\f\v]+/g, " ").trim();
-    const cleanedNorm = cleaned.replace(/[ \t\r\n\f\v]+/g, " ").trim();
+    const titleNorm = String(i.title || "").replace(/\s+/g, " ").trim();
+    const cleanedNorm = cleaned.replace(/\s+/g, " ").trim();
     let isDup = false;
     if (!cleanedNorm) {
       isDup = true;
@@ -1127,11 +1166,13 @@ function renderItemRow(i, num, dispName) {
     '<div class="top">' +
     '<div class="row1">' +
     '<span class="' + numCls + '">' + num + '</span>' +
-    timeBlock +
+    dateCell +
+    timeCell +
     srcCell +
     secCell +
     subCell +
     starsCell +
+    thumbCell +
     '</div>' +
     '<a class="title' + vis + '" href="' + i.url + '" target="_blank" rel="noopener">' + escapeHtml(i.title) + '</a>' +
     '<span class="cmt-action">' + renderCommentAction(i) + '</span>' +
