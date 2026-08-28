@@ -739,43 +739,26 @@ function _secNum(s) {
 }
 
 // ===== 属性过滤器（树状分支：单一顶层"科技"，下挂国际/中国/AI 三个一级分支）=====
-// 顶层 3 个一级分类：中国 / 国际 / 科技
-// 国际 = 路透社；科技 = 全部 AI 实验室 + HF Daily Papers + 开源 + 政策/学术
-// ===== 属性过滤器（2026-08-25：CCTV 源下架 + 「政府机构」分类下线 + 4 个国内 AI 换官方域）=====
+// 顶层 2 个一级分类：全球 / 科技
+// 全球 = 人民日报 + Reuters 路透社；科技 = 全部 AI 实验室 + HF Daily Papers + 开源 + 政策/学术
+// ===== 属性过滤器（2026-08-28：中国/国际合并为"全球" + MIT Tech Review 升为科技直属分支）=====
 const FILTER_GROUPS = [
-  // ===== 中国 =====
+  // ===== 全球（人民日报 + Reuters 路透社；2026-08-28 由原"中国"+"国际"合并）=====
   {
-    key: "cn", label: "中国",
-    // 2026-08-25: 「政府机构」分类整行下线（用户偏好），余下"人民日报" + "学术机构"
-    root: { label: "中国", match: ["people_daily","ia_cas","pku_ai","tsinghua_ai","baai","caai"] },
+    key: "global", label: "全球",
+    root: { label: "全球", match: ["reuters", "people_daily"] },
     branches: [
       { label: "人民日报", match: ["people_daily"] },
-      // 2026-08-25: CCTV 源 + 「政府机构」分支删除
-      { label: "学术机构", match: ["ia_cas","pku_ai","tsinghua_ai","baai","caai"],
-        leaves: [
-          { label: "中科院自动化所", match: ["ia_cas"] },
-          { label: "北大 AI", match: ["pku_ai"] },
-          { label: "清华 AI", match: ["tsinghua_ai"] },
-          { label: "智源研究院", match: ["baai"] },
-          { label: "中国 AI 学会", match: ["caai"] },
-        ]},
+      { label: "Reuters 路透社", match: ["reuters"] },
     ],
   },
-  // ===== 国际（路透社）=====
-  {
-    key: "intl", label: "国际",
-    root: { label: "国际", match: ["reuters"] },
-    branches: [
-      { label: "路透社", match: ["reuters"] },
-    ],
-  },
-  // ===== 科技（2026-08-25：NVIDIA 换 Newsroom + 新增 SpaceX；2026-08-25 又：政府机构/学术归"中国"+ 4 国内 AI 换官方域）=====
+  // ===== 科技（2026-08-28：MIT Tech Review 升为直属分支，不再藏在 AI 研究里）=====
   {
     key: "tech", label: "科技",
     root: { label: "科技", match: ["hf_papers","openai_news","openai_research","anthropic","deepmind","google_research","meta_ai","ms_ai","nvidia_ai","mit_tech_review","github_trending","hf_blog","spacex_news","deepseek","zhipu","qwen","moonshot"] },
     branches: [
       { label: "论文 · HF Daily Papers", match: ["hf_papers"] },
-      { label: "AI 研究", match: ["openai_news","openai_research","anthropic","deepmind","google_research","meta_ai","ms_ai","nvidia_ai","mit_tech_review","github_trending","hf_blog","deepseek","zhipu","qwen","moonshot"],
+      { label: "AI 研究", match: ["openai_news","openai_research","anthropic","deepmind","google_research","meta_ai","ms_ai","nvidia_ai","github_trending","hf_blog","deepseek","zhipu","qwen","moonshot"],
         leaves: [
           { label: "OpenAI", match: ["openai_news","openai_research"] },
           { label: "Anthropic", match: ["anthropic"] },
@@ -783,7 +766,6 @@ const FILTER_GROUPS = [
           { label: "Meta AI", match: ["meta_ai"] },
           { label: "Microsoft AI", match: ["ms_ai"] },
           { label: "NVIDIA", match: ["nvidia_ai"] },
-          { label: "MIT Tech Review", match: ["mit_tech_review"] },
           { label: "GitHub Trending", match: ["github_trending"] },
           { label: "HF Blog", match: ["hf_blog"] },
           { label: "DeepSeek", match: ["deepseek"] },
@@ -794,6 +776,10 @@ const FILTER_GROUPS = [
       { label: "SpaceX 航天", match: ["spacex_news"],
         leaves: [
           { label: "SpaceX", match: ["spacex_news"] },
+        ]},
+      { label: "MIT Tech Review", match: ["mit_tech_review"],
+        leaves: [
+          { label: "MIT Tech Review", match: ["mit_tech_review"] },
         ]},
     ],
   },
