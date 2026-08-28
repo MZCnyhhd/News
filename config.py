@@ -299,6 +299,10 @@ CATEGORY_TREE = [
 # 数据来源：用户提供的「AI 全景信息架构」链接清单
 # 这些 ID 不会出现在 SOURCES 抓取调度里，但会注入前端 SOURCE_HOMES
 DIRECTORY_SOURCES: list[DirectoryEntry] = [
+    # === 大模型 / 中国 AI 公司（2026-08-28：用户要求「公司」12 品牌含抖音/腾讯，
+    # 未在 SOURCES 中实现 scraper，仅用于过滤器 0 条时的外站兜底跳转） ===
+    DirectoryEntry("dir_doubao", "抖音 Doubao", "https://www.doubao.com/"),
+    DirectoryEntry("dir_tencent", "腾讯 Hunyuan", "https://hunyuan.tencent.com/"),
     # 基础设备 · AI 芯片 / GPU
     DirectoryEntry("dir_nvidia_dev", "NVIDIA Developer", "https://developer.nvidia.com/"),
     DirectoryEntry("dir_amd", "AMD AI", "https://www.amd.com/en/products/accelerators"),

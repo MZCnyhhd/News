@@ -628,6 +628,19 @@ main { max-width: 100%; margin: 0; padding: 14px 20px 60px; }
 .attr-pill.all { font-weight: 700; }
 /* 叶子行（具体单源 pill）样式稍弱以区分聚合行 */
 .attr-row.sub .attr-row-label { color: #64748b; font-weight: 600; font-size: 12.5px; }
+/* 2026-08-28：属性过滤器三级嵌套 + 人民日报动态板块行样式 */
+/* .level-1 = 二级行（人民日报板块/World-Business/航天/SpaceX/AI 等），缩进比顶级再深 */
+.attr-row.sub.level-1 { padding-left: 14px; border-left: 2px solid #eef2f7; margin-left: 0; }
+/* .level-2 = 三级行（公司 12 品牌 / HF Daily Papers），再深缩进 + 字号略小 */
+.attr-row.sub.level-2 { padding-left: 24px; border-left: 1.5px solid #f0f4f9; }
+.attr-row.sub.level-2 .attr-row-label { font-size: 12px; font-weight: 500; color: #475569; }
+.attr-row.sub.level-2 .attr-pill { font-size: 12px; padding: 3px 10px; }
+/* 人民日报动态板块行：红色左边线 + 板块文字色 → 强化"中国官媒"语义 */
+.attr-row.pd-block { padding-left: 14px; border-left: 2px solid #c0392b; }
+.attr-row.pd-block .attr-row-label { color: #c0392b; }
+.attr-row.pd-block .attr-row-pills .attr-pill { font-size: 12px; padding: 3px 10px; }
+/* Reuters World/Business 行：蓝色左边线突出"国际" */
+.attr-row.sub.level-1:not(.pd-block) { border-left-color: #e7ecf5; }
 /* 0 条源 → 直达源站链接（与 pill 同一形状，灰化） */
 .attr-pill-link { text-decoration: none; color: inherit; }
 .empty { text-align: center; color: var(--text-muted); padding: 48px 0 60px; font-size: 14px; }
@@ -738,53 +751,93 @@ function _secNum(s) {
   return m ? parseInt(m[0], 10) : 99;
 }
 
-// ===== 属性过滤器（树状分支：单一顶层"科技"，下挂国际/中国/AI 三个一级分支）=====
-// 顶层 2 个一级分类：全球 / 科技
-// 全球 = 人民日报 + Reuters 路透社；科技 = 全部 AI 实验室 + HF Daily Papers + 开源 + 政策/学术
-// ===== 属性过滤器（2026-08-28：中国/国际合并为"全球" + MIT Tech Review 升为科技直属分支）=====
+// ===== 属性过滤器（树状 + 板块过滤；2026-08-28 大重构）=====
+// 重大变更：
+//  1) pill 模型升级为 (sources[], section|null) 二元组：
+//     - sources 限定来源 id 集合（核心过滤维度）
+//     - section 是 extra.section 精确匹配（用于人民日报"01版：要闻" / Reuters"World"/"Business"）
+//  2) 三个一级分类 → 两个：「全球」「科技」
+//  3) 全球下分「人民日报」「Reuters 路透社」，
+//     - 人民日报固定按钮 = 整个源；动态 sub-row 由当天 items 实时扫描板块（排除广告/副刊）
+//     - Reuters 固定按钮 = 整个源；固定 sub-row = World / Business
+//  4) 科技下三级嵌套：分支(AI/航天/综合) → sub_branch(公司/论文/SpaceX/MIT) → leaves(12 品牌/HF)
+//  5) 「公司」= 12 个 AI 品牌 pill（含抖音/腾讯 DirectoryEntry 兜底）
+//  6) pill 选中态通过 canonical key = sources 排序 + "§" + section 精确匹配；
+//     activeSources/activeSection 取代单一 activeSourceIds；再次点击已激活 pill 取消
 const FILTER_GROUPS = [
-  // ===== 全球（人民日报 + Reuters 路透社；2026-08-28 由原"中国"+"国际"合并）=====
+  // ===== 全球 =====
   {
     key: "global", label: "全球",
-    root: { label: "全球", match: ["reuters", "people_daily"] },
+    sources: ["reuters", "people_daily"],
     branches: [
-      { label: "人民日报", match: ["people_daily"] },
-      { label: "Reuters 路透社", match: ["reuters"] },
+      // 人民日报：根=整个源；动态 sub-row 按当天板块自动列出（剔除 广告 / 副刊）
+      {
+        label: "人民日报", sources: ["people_daily"],
+        dynamic_sections: { source_id: "people_daily", exclude: /广告|副刊/ },
+      },
+      // 路透社：根=整个源；固定 sub-row = World / Business（来自 extra.section）
+      {
+        label: "Reuters 路透社", sources: ["reuters"],
+        fixed_subsections: [
+          { label: "World", section: "World" },
+          { label: "Business", section: "Business" },
+        ],
+      },
     ],
   },
-  // ===== 科技（2026-08-28：MIT Tech Review 升为直属分支，不再藏在 AI 研究里）=====
+  // ===== 科技（3 级嵌套）=====
   {
     key: "tech", label: "科技",
-    root: { label: "科技", match: ["hf_papers","openai_news","openai_research","anthropic","deepmind","google_research","meta_ai","ms_ai","nvidia_ai","mit_tech_review","github_trending","hf_blog","spacex_news","deepseek","zhipu","qwen","moonshot"] },
+    sources: ["hf_papers","openai_news","openai_research","anthropic","deepmind","google_research","meta_ai","ms_ai","nvidia_ai","mit_tech_review","github_trending","hf_blog","spacex_news","deepseek","zhipu","qwen","moonshot","dir_doubao","dir_tencent"],
     branches: [
-      { label: "论文 · HF Daily Papers", match: ["hf_papers"] },
-      { label: "AI 研究", match: ["openai_news","openai_research","anthropic","deepmind","google_research","meta_ai","ms_ai","nvidia_ai","github_trending","hf_blog","deepseek","zhipu","qwen","moonshot"],
-        leaves: [
-          { label: "OpenAI", match: ["openai_news","openai_research"] },
-          { label: "Anthropic", match: ["anthropic"] },
-          { label: "Google DeepMind", match: ["deepmind","google_research"] },
-          { label: "Meta AI", match: ["meta_ai"] },
-          { label: "Microsoft AI", match: ["ms_ai"] },
-          { label: "NVIDIA", match: ["nvidia_ai"] },
-          { label: "GitHub Trending", match: ["github_trending"] },
-          { label: "HF Blog", match: ["hf_blog"] },
-          { label: "DeepSeek", match: ["deepseek"] },
-          { label: "智谱 GLM", match: ["zhipu"] },
-          { label: "通义千问", match: ["qwen"] },
-          { label: "月之暗面", match: ["moonshot"] },
-        ]},
-      { label: "SpaceX 航天", match: ["spacex_news"],
-        leaves: [
-          { label: "SpaceX", match: ["spacex_news"] },
-        ]},
-      { label: "MIT Tech Review", match: ["mit_tech_review"],
-        leaves: [
-          { label: "MIT Tech Review", match: ["mit_tech_review"] },
-        ]},
+      // ---- AI：sub_branch = 公司（含 12 AI 品牌）/ 论文（HF Daily Papers）----
+      {
+        label: "AI",
+        sources: ["openai_news","openai_research","anthropic","deepmind","google_research","meta_ai","ms_ai","nvidia_ai","hf_papers","deepseek","zhipu","qwen","moonshot","dir_doubao","dir_tencent"],
+        sub_branches: [
+          {
+            label: "公司", sources: ["openai_news","openai_research","anthropic","deepmind","google_research","meta_ai","ms_ai","nvidia_ai","deepseek","zhipu","qwen","moonshot","dir_doubao","dir_tencent"],
+            leaves: [
+              { label: "OpenAI", sources: ["openai_news","openai_research"] },
+              { label: "Anthropic", sources: ["anthropic"] },
+              { label: "Google DeepMind", sources: ["deepmind","google_research"] },
+              { label: "Meta AI", sources: ["meta_ai"] },
+              { label: "Microsoft AI", sources: ["ms_ai"] },
+              { label: "NVIDIA", sources: ["nvidia_ai"] },
+              { label: "DeepSeek", sources: ["deepseek"] },
+              { label: "智谱 GLM", sources: ["zhipu"] },
+              { label: "通义千问", sources: ["qwen"] },
+              { label: "月之暗面", sources: ["moonshot"] },
+              { label: "抖音", sources: ["dir_doubao"] },
+              { label: "腾讯", sources: ["dir_tencent"] },
+            ],
+          },
+          {
+            label: "论文", sources: ["hf_papers"],
+            leaves: [
+              { label: "HF Daily Papers", sources: ["hf_papers"] },
+            ],
+          },
+        ],
+      },
+      // ---- 航天：sub_branch = SpaceX（无 leaves，单一 pill）----
+      {
+        label: "航天", sources: ["spacex_news"],
+        sub_branches: [
+          { label: "SpaceX", sources: ["spacex_news"], leaves: [] },
+        ],
+      },
+      // ---- 综合：sub_branch = MIT Tech Review（无 leaves）----
+      {
+        label: "综合", sources: ["mit_tech_review"],
+        sub_branches: [
+          { label: "MIT Tech Review", sources: ["mit_tech_review"], leaves: [] },
+        ],
+      },
     ],
   },
 ];
-// 真实爬虫源 id（2026-08-25：cctv 下架）
+// 真实爬虫源 id（2026-08-25：cctv 下架；2026-08-28 无变动）
 const REAL_SOURCE_IDS = ["reuters", "people_daily", "mit_tech_review", "openai_news",
   "openai_research", "anthropic", "deepmind", "google_research", "meta_ai", "ms_ai",
   "nvidia_ai", "hf_blog", "hf_papers", "github_trending", "spacex_news",
@@ -792,108 +845,169 @@ const REAL_SOURCE_IDS = ["reuters", "people_daily", "mit_tech_review", "openai_n
   "ia_cas", "pku_ai", "tsinghua_ai",
   "baai", "caai"];
 
-// 当前 sub-filter 选中的 source_id 集合（null = 不过滤，显示全部）
-// 用稳定字符串比较："a,b" === "a,b" 视为同一个选择，便于 toggle
-let activeKey = null;            // 与 activeSourceIds 同步的字符串形式（点击历史用）
-let activeSourceIds = null;      // 同上但为数组
+// 当前 sub-filter 选中的 pill id（null = 不过滤，显示全部）
+// 每个 pill 拥有全局唯一 id（来源位置路径，如 'tech.AI.公司.OpenAI'）；选中/取消基于该 id
+// 这样多个 (sources,section) 完全相同的 pill（论文 vs HF Daily Papers vs 全部）只会点亮用户真正点的那个
+let activeKey = null;
+let activeSources = null;
+let activeSection = null;
 
-// 把数组转成排序后的稳定字符串（用于 toggle 比较，避免 ["a","b"] vs ["b","a"] 误判）
-const toKey = (ids) => ids.slice().sort().join(",");
+// 把 (sources, section) 转成稳定的 canonical key（仅用于未指定 pill id 的 fallback 比较）
+const pillKey = (sources, section) => sources.slice().sort().join("|") + "\u00a7" + (section == null ? "" : section);
 
-// 默认不过滤（activeSourceIds = null）→ 看板加载即展示全部新闻（中国 + 国际 + 科技）。
-// 点击任意分组的"全部" pill 缩小到该分类；再次点击已激活 pill 取消过滤回到全部。
-activeSourceIds = null;
-activeKey = null;
-
-// pill 的"激活"判定：精确匹配 activeSourceIds（避免父 pill 被高亮的视觉混乱）。
-// 行式布局下，每个 pill 都是"选中精确等于自己"才高亮，避免选中叶子时整行变色。
-const isActive = (ids) => {
-  if (!activeSourceIds) return false;
-  return toKey(ids) === toKey(activeSourceIds);
+// 计算 items 命中 pill 数量（O(N) 一次扫描，传 matcher 闭包复用）
+const makeMatcher = (items) => (sources, section) => {
+  let n = 0;
+  for (const it of items) {
+    if (!sources.includes(it.source_id)) continue;
+    if (section != null) {
+      const sec = (it.extra && it.extra.section) || "";
+      if (sec !== section) continue;
+    }
+    n++;
+  }
+  return n;
 };
 
-// 工具：把一个 match 数组转成 HTML data-ids 字符串
-const idsAttr = (ids) => ids.join(",");
+// 默认不过滤（activeSources = null）→ 看板加载即展示全部新闻
+activeSources = null;
+activeSection = null;
+activeKey = null;
 
-// 工具：渲染单个 pill
-// 0 条 → 直接外链到源站（避免点了筛选却空列表的尴尬）；
-// 其余情况 → 渲染为按钮（筛选行为）
-// 多源 0 条 fallback：取 ids[0] 的源站作为跳转目标（OpenAI、DeepMind 等 leaflet 同样可点）
-function renderPill(label, ids, opts) {
+// pill 选中判定：基于 pill id 精确匹配（每个 pill 一对一）
+// 避免多个 (sources,section) 完全相同的 pill 同时点亮（如「论文」「HF Daily Papers」「全部」三者行为一致 → 只点亮用户真正点的那个）
+const isActive = (id) => activeKey != null && activeKey === id;
+
+// HTML data-attribute 转义（section 可能含 " ' < 等）
+const escapeAttr = (s) => String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+
+// 渲染单个 pill；matcher 是 makeMatcher 返回的计数闭包
+// pillId: 全局唯一（路径式，如 'tech.AI.公司.OpenAI'），用于点击/激活态匹配
+// 0 条 → 直达源站外链（pill 仍占位可点击；空数据 fallback 不渲染筛选项，避免视觉噪音）
+function renderPill(label, sources, section, matcher, opts) {
   opts = opts || {};
-  const c = opts.count;
-  const isZero = (c === 0 && !opts.alwaysShow);
+  const cnt = matcher(sources, section == null ? null : section);
+  const pillId = opts.pillId || pillKey(sources, section == null ? null : section);
+  const isZero = (cnt === 0 && !opts.alwaysShow);
   if (isZero) {
-    const h = SOURCE_HOMES[ids[0]];
+    const h = SOURCE_HOMES[sources[0]];
     if (h && h.url) {
       const cls = "attr-pill attr-pill-link zero";
-      const tip = ids.length === 1
+      const tip = sources.length === 1
         ? '今日暂无收录，点击直达 ' + escapeHtml(h.name)
-        : '今日该方向暂无收录（已选 ' + ids.length + ' 个源），点击直达 ' + escapeHtml(h.name);
+        : '今日该方向暂无收录（已选 ' + sources.length + ' 个源），点击直达 ' + escapeHtml(h.name);
       return '<a class="' + cls + '" href="' + h.url + '" target="_blank" rel="noopener" ' +
-        'data-ids="' + idsAttr(ids) + '" title="' + tip + '">' +
+        'data-pill-id="' + escapeAttr(pillId) + '" ' +
+        'data-sources="' + sources.join(",") + '" data-section="' + escapeAttr(section == null ? "" : section) + '" ' +
+        'title="' + tip + '">' +
         '<span class="plabel">' + escapeHtml(label) + '</span>' +
       '</a>';
     }
   }
   const cls = "attr-pill"
     + (opts.isAll ? " all" : "")
-    + (isActive(ids) ? " active" : "")
+    + (isActive(pillId) ? " active" : "")
     + (isZero ? " zero" : "");
-  const cntStr = (c === undefined) ? "" : '<span class="pcnt">' + c + '</span>';
-  return '<button class="' + cls + '" data-ids="' + idsAttr(ids) + '">' +
+  const cntStr = '<span class="pcnt">' + cnt + '</span>';
+  return '<button class="' + cls + '" ' +
+    'data-pill-id="' + escapeAttr(pillId) + '" ' +
+    'data-sources="' + sources.join(",") + '" ' +
+    'data-section="' + escapeAttr(section == null ? "" : section) + '">' +
     '<span class="plabel">' + escapeHtml(label) + '</span>' +
     cntStr +
   '</button>';
 }
 
-// 工具：渲染一行（属性名 + pills）
-function renderRow(label, pills, isSub) {
-  return '<div class="attr-row' + (isSub ? ' sub' : '') + '">' +
+// 渲染一行：属性名 + pills；level 控制缩进（0=顶级 1=二级 2=三级）
+function renderRow(label, pills, opts) {
+  opts = opts || {};
+  const level = opts.level || 0;
+  const isSub = level > 0;
+  const extraCls = opts.extraCls || "";
+  // level 2 加更深缩进（科技公司品牌的 12 颗 pill 行）
+  const depthCls = level >= 2 ? " deep" : "";
+  return '<div class="attr-row' + (isSub ? ' sub' : '') + ' level-' + level + depthCls + ' ' + extraCls + '">' +
     '<div class="attr-row-label">' + escapeHtml(label) + '</div>' +
     '<div class="attr-row-pills">' + pills.join("") + '</div>' +
   '</div>';
 }
 
-// ===== 行式属性过滤器（Boss 直聘风格 · 2026-08-22 重构）=====
-// 层级：根(cn root) → 3 个 L1 mid(人民日报/政府机构/学术机构) → 每个 L1 的 leaves
-// 渲染：每个节点一行；每行 = 属性名 + "全部" pill + N 个子节点 pill
-// 点击：精确匹配选中（避免父 pill 联动高亮带来的视觉混乱）；再次点击 → 取消
-//
-// 空数据 sub-row 自动隐藏（2026-08-25）：branch 自己 0 条 + 所有 leaves 0 条时，
-// 该 sub-row 不渲染，避免「点啥都没数据」的视觉噪音（顶层 pill 仍保留灰化）。
-function renderAttrFilter(items, groups) {
-  const cnt = {};
-  for (const it of items) cnt[it.source_id] = (cnt[it.source_id] || 0) + 1;
-  const sum = (ids) => ids.reduce((s, id) => s + (cnt[id] || 0), 0);
+// 工具：从 items 扫描 people_daily 当天所有有效板块（剔除 广告 / 副刊），按版号排序
+function scanPDSections(items) {
+  const sec = /广告|副刊/;
+  // 用对象记录板块 → 计数（section unique）
+  const seen = Object.create(null);
+  for (const it of items) {
+    if (it.source_id !== "people_daily") continue;
+    const e = it.extra || {};
+    const s = (e.section || "").trim();
+    if (!s || sec.test(s)) continue;
+    seen[s] = (seen[s] || 0) + 1;
+  }
+  // 按版号升序（01 在顶，20 在底）；用 [0-9] 字符类避免 Python non-raw 字符串的 \d 转义陷阱
+  const arr = Object.entries(seen);
+  arr.sort((a, b) => {
+    const na = parseInt((a[0].match(/[0-9]+/) || ["999"])[0], 10);
+    const nb = parseInt((b[0].match(/[0-9]+/) || ["999"])[0], 10);
+    return na - nb;
+  });
+  return arr; // [[section, count], ...]
+}
 
+// ===== 渲染过滤器（含 3 级嵌套 + 动态 PD 板块行）=====
+function renderAttrFilter(items, groups) {
+  const matcher = makeMatcher(items);
   const rowsHtml = [];
 
-  // 遍历每个 group（当前只有 cn 一个组）
   groups.forEach(g => {
-    const allIds = g.root.match.slice();
-    const allC = sum(allIds);
-    // ===== 行 0：根（"中国"）=====
-    // 子节点 = 各 branch.label + branch.match
-    const l1Pills = g.branches.map(br => renderPill(br.label, br.match, { count: sum(br.match) }));
-    // "全部" pill = 该 group 的全 match
-    l1Pills.unshift(renderPill("全部", allIds, { count: allC, isAll: true }));
-    rowsHtml.push(renderRow(g.label, l1Pills, false));
+    // ===== 行 L0：根（"全球"/"科技"）=====
+    const allC = matcher(g.sources, null);
+    const rootPills = g.branches.map(br =>
+      renderPill(br.label, br.sources, null, matcher, { pillId: g.key + "." + br.label }));
+    rootPills.unshift(renderPill("全部", g.sources, null, matcher, { pillId: g.key + ".全部", isAll: true }));
+    rowsHtml.push(renderRow(g.label, rootPills, { level: 0 }));
 
-    // ===== 行 1..N：每个 L1 branch（人民日报/政府机构/学术机构）=====
+    // ===== 每个 branch 行 =====
     g.branches.forEach(br => {
-      const leaves = br.leaves || [];
-      // 如果 L1 本身就是叶子（无子级），跳过该独立行（已经在 L0 行里显示了）
-      if (leaves.length === 0) return;
-      const allBranchIds = br.match.slice();
-      const allBranchC = sum(allBranchIds);
-      // 空数据 sub-row 隐藏：branch 自己 0 条 + 所有 leaves 也 0 条 → 不渲染
-      if (allBranchC === 0 && leaves.every(lv => sum(lv.match) === 0)) {
+      const brPath = g.key + "." + br.label;
+      // 人民日报分支：动态板块 sub-row（每次 items 更新时由 updateAttrFilterCounts 局部重建）
+      if (br.dynamic_sections) {
+        const secArr = scanPDSections(items);
+        if (secArr.length) {
+          const pills = secArr.map(([s]) =>
+            renderPill(s, [br.dynamic_sections.source_id], s, matcher, { pillId: brPath + "." + s }));
+          rowsHtml.push(renderRow(br.label, pills, { level: 1, extraCls: "pd-block" }));
+        }
         return;
       }
-      const subPills = leaves.map(lv => renderPill(lv.label, lv.match, { count: sum(lv.match) }));
-      subPills.unshift(renderPill("全部", allBranchIds, { count: allBranchC, isAll: true }));
-      rowsHtml.push(renderRow(br.label, subPills, true));
+      // Reuters 分支：World / Business sub-row（板块固定，无需增量更新）
+      if (br.fixed_subsections) {
+        const pills = br.fixed_subsections.map(sb =>
+          renderPill(sb.label, br.sources, sb.section, matcher, { pillId: brPath + "." + sb.label }));
+        if (pills.length) rowsHtml.push(renderRow(br.label, pills, { level: 1 }));
+        return;
+      }
+      // 科技分支（sub_branches 模式）：每个 sub_branch 一行
+      if (br.sub_branches) {
+        // 行 L1：branch 自身（"AI"）：全部 + 各 sub_branch pill
+        const branchAllCnt = matcher(br.sources, null);
+        const subPills = br.sub_branches.map(sb =>
+          renderPill(sb.label, sb.sources, null, matcher, { pillId: brPath + "." + sb.label }));
+        if (subPills.length) {
+          subPills.unshift(renderPill("全部", br.sources, null, matcher, { pillId: brPath + ".全部", isAll: true }));
+          rowsHtml.push(renderRow(br.label, subPills, { level: 1 }));
+        }
+        // 行 L2：每个 sub_branch 的 leaves（12 AI 品牌、HF Daily Papers）
+        br.sub_branches.forEach(sb => {
+          if (sb.leaves && sb.leaves.length) {
+            const sbPath = brPath + "." + sb.label;
+            const leafPills = sb.leaves.map(lf =>
+              renderPill(lf.label, lf.sources, null, matcher, { pillId: sbPath + "." + lf.label }));
+            leafPills.unshift(renderPill("全部", sb.sources, null, matcher, { pillId: sbPath + ".全部", isAll: true }));
+            rowsHtml.push(renderRow(sb.label, leafPills, { level: 2 }));
+          }
+        });
+      }
     });
   });
 
@@ -912,33 +1026,46 @@ function bindViewSwitcher() {
   if (simple) simple.href = 'simple.html';
 }
 
-// ===== 增量更新：仅刷 attr-filter 内每个 pill 的数字徽章 + active 态，不重建 DOM =====
-// SSE 推送 / 60s 刷新都走这里，避免 DOM 重建导致的闪烁
+// ===== 增量更新：刷 attr-filter 内每个 pill 的数字徽章 + 灰化 + 重建动态 PD sub-row =====
+// 不重建固定 DOM；动态人民日报板块单独从 #attrfilter .pd-block .attr-row-pills 容器里更新
 function updateAttrFilterCounts(items) {
-  const cnt = {};
-  for (const it of items) cnt[it.source_id] = (cnt[it.source_id] || 0) + 1;
-  const sum = (ids) => ids.reduce((s, id) => s + (cnt[id] || 0), 0);
+  const matcher = makeMatcher(items);
   const af = document.getElementById("attrfilter");
   if (!af) return;
+  // 1) 固定 pill：刷新 count + zero 灰化（基于 pill id 匹配 active，避免误点亮行为相同的其他 pill）
   af.querySelectorAll(".attr-pill").forEach(el => {
-    const ids = (el.dataset.ids || "").split(",").filter(Boolean);
-    if (!ids.length) return;
-    const n = sum(ids);
+    const sources = (el.dataset.sources || "").split(",").filter(Boolean);
+    const section = el.dataset.section || null;
+    if (!sources.length) return;
+    const n = matcher(sources, section);
     const cntEl = el.querySelector(".pcnt");
     if (cntEl) cntEl.textContent = n;
-    // 0 条灰化（与首次构建口径一致）
     if (n === 0) el.classList.add("zero");
     else el.classList.remove("zero");
   });
+  // 2) 动态 PD sub-row 重建（人民日报板块可能当天新增/移除；保留 pill id 语义）：
+  //    扫描得到的板块 pill id 用稳定路径 'global.人民日报.<sec>'，与初次构建一致
+  const pdContainer = af.querySelector(".attr-row.pd-block .attr-row-pills");
+  if (pdContainer) {
+    const secArr = scanPDSections(items);
+    if (secArr.length) {
+      pdContainer.innerHTML = secArr.map(([s]) =>
+        renderPill(s, ["people_daily"], s, matcher, { pillId: "global.人民日报." + s })).join("");
+      // 重建后保留已激活态（用户已选中某板块的情况）
+      syncAttrFilterActive();
+    } else {
+      pdContainer.innerHTML = "";
+    }
+  }
 }
 
-// ===== 点击 pill 后增量更新 active 态（不重建 DOM）=====
+// ===== 点击 pill 后增量更新 active 态（不重建 DOM；基于 pill id 精确匹配）=====
 function syncAttrFilterActive() {
   const af = document.getElementById("attrfilter");
   if (!af) return;
   af.querySelectorAll(".attr-pill").forEach(el => {
-    const ids = (el.dataset.ids || "").split(",").filter(Boolean);
-    if (isActive(ids)) el.classList.add("active");
+    const id = el.dataset.pillId || "";
+    if (isActive(id)) el.classList.add("active");
     else el.classList.remove("active");
   });
 }
@@ -948,31 +1075,38 @@ function bindAttrFilter() {
   const root = document.getElementById("attrfilter");
   if (!root) return;
   root.addEventListener("click", (e) => {
-    const b = e.target.closest("button[data-ids]");
+    const b = e.target.closest("button[data-pill-id]");
     if (!b) return;
-    const d = b.dataset.ids;
-    if (!d) return;
-    const newIds = d.split(",").filter(Boolean);
-    if (!newIds.length) return;
-    const newKey = toKey(newIds);
-    // toggle：再次点击当前激活的 pill → 取消选择
-    if (newKey === activeKey) {
+    const pillId = b.dataset.pillId || "";
+    const sources = (b.dataset.sources || "").split(",").filter(Boolean);
+    if (!sources.length || !pillId) return;
+    const section = b.dataset.section || null;
+    // toggle：再次点击当前激活 pill → 取消
+    if (activeKey === pillId) {
       activeKey = null;
-      activeSourceIds = null;
+      activeSources = null;
+      activeSection = null;
     } else {
-      activeKey = newKey;
-      activeSourceIds = newIds;
+      activeKey = pillId;
+      activeSources = sources;
+      activeSection = section;
     }
     // 1) 增量同步 pill active 态（不重建 attr-filter DOM）
     syncAttrFilterActive();
-    // 2) 重建 items 区（看板过滤变了，列表要刷新）
+    // 2) 重建 items 区（过滤变了，列表要刷新）
     renderItemsArea(
-      activeSourceIds ? cachedItems.filter(i => new Set(activeSourceIds).has(i.source_id)) : cachedItems.slice(),
-      activeSourceIds
+      (activeSources ? cachedItems.filter(i => {
+        if (!activeSources.includes(i.source_id)) return false;
+        if (activeSection != null) {
+          const sec = (i.extra && i.extra.section) || "";
+          if (sec !== activeSection) return false;
+        }
+        return true;
+      }) : cachedItems.slice()),
+      activeSources ? { sources: activeSources, section: activeSection } : null
     );
   });
 }
-
 // 把 12934 → '12.9k' / 1234 → '1.2k' / 48950 → '49k' / 999 → '999'
 function fmtStars(n) {
   if (typeof n !== "number" || isNaN(n)) return "";
@@ -1185,8 +1319,16 @@ function sortByTime(arr) {
 // （原"源站导航"区已下线：2026-08-22 移除 src-nav 块，0 条源改为直接链接到源站）
 
 // 空状态：列出当前 filter 覆盖源的官网入口
-function renderEmptyState(visibleIds) {
-  const ids = visibleIds || Object.keys(SOURCE_HOMES);
+function renderEmptyState(activeSelection) {
+  // 兼容老接口（数组）与新接口（{sources,section}）
+  let ids;
+  if (Array.isArray(activeSelection)) {
+    ids = activeSelection;
+  } else if (activeSelection && Array.isArray(activeSelection.sources)) {
+    ids = activeSelection.sources;
+  } else {
+    ids = Object.keys(SOURCE_HOMES);
+  }
   const links = ids
     .filter(id => SOURCE_HOMES[id])
     .map(id => '<a class="src-link" href="' + SOURCE_HOMES[id].url +
@@ -1199,11 +1341,11 @@ function renderEmptyState(visibleIds) {
 }
 
 // ===== 渲染 items 列表区（独立容器，可独立重建）=====
-function renderItemsArea(visibleItems, filterIdsForEmpty) {
+function renderItemsArea(visibleItems, activeSelection) {
   const container = document.getElementById("items");
   if (!container) return;
   if (!visibleItems.length) {
-    container.innerHTML = renderEmptyState(filterIdsForEmpty);
+    container.innerHTML = renderEmptyState(activeSelection);
     return;
   }
   const sorted = visibleItems.slice();
@@ -1222,9 +1364,17 @@ function render(nowStr) {
   const list = document.getElementById("list");
   for (const i of cachedItems) itemByUrl[i.url] = i;
   let visibleItems = cachedItems.slice();
-  if (activeSourceIds) {
-    const set = new Set(activeSourceIds);
-    visibleItems = visibleItems.filter(i => set.has(i.source_id));
+  // 过滤逻辑：精确匹配 (sources, section)
+  if (activeSources) {
+    const srcSet = new Set(activeSources);
+    visibleItems = visibleItems.filter(i => {
+      if (!srcSet.has(i.source_id)) return false;
+      if (activeSection != null) {
+        const sec = (i.extra && i.extra.section) || "";
+        if (sec !== activeSection) return false;
+      }
+      return true;
+    });
   }
 
   // ===== attr-filter：首次完整构建，后续只更新数字 =====
@@ -1236,12 +1386,12 @@ function render(nowStr) {
     bindAttrFilter();
     bindViewSwitcher();
   } else {
-    // 增量：attr-filter 的所有节点结构都保留，只刷 .pcnt 数字 + .zero 灰化
+    // 增量：attr-filter 的所有节点结构都保留，只刷 .pcnt 数字 + .zero 灰化 + 重建动态 PD 子行
     updateAttrFilterCounts(cachedItems);
   }
 
   // items 区独立管理
-  renderItemsArea(visibleItems, activeSourceIds);
+  renderItemsArea(visibleItems, activeSources ? { sources: activeSources, section: activeSection } : null);
 }
 
 const IS_STATIC = !!window.__STATIC__;
