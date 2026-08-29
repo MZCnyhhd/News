@@ -647,6 +647,11 @@ main { max-width: 100%; margin: 0; padding: 14px 20px 60px; }
 .attr-row.pd-block { padding-left: 14px; border-left: 2px solid #c0392b; }
 .attr-row.pd-block .attr-row-label { color: #c0392b; }
 .attr-row.pd-block .attr-row-pills .attr-pill { font-size: 12px; padding: 3px 10px; }
+/* 2026-08-29：顶级「全部 / 全球 / 科技」行——空 label 隐藏，与下方两栏网格分隔 */
+.attr-row.top-cat { padding-bottom: 10px; margin-bottom: 6px; border-bottom: 1px dashed #eef2f7; }
+.attr-row.top-cat .attr-row-label { display: none; }
+.attr-row.top-cat .attr-row-pills { padding-left: 0; }
+.attr-row.top-cat .attr-pill { font-size: 13.5px; padding: 5px 14px; }
 /* Reuters World/Business 行：蓝色左边线突出"国际" */
 .attr-row.sub.level-1:not(.pd-block) { border-left-color: #e7ecf5; }
 /* 0 条源 → 直达源站链接（与 pill 同一形状，灰化） */
@@ -973,15 +978,28 @@ function scanPDSections(items) {
 // ===== 渲染过滤器（含 3 级嵌套 + 动态 PD 板块行）=====
 // 2026-08-28：sub-row 默认折叠（hidden）；用户点击上方 branch pill 时才展开（toggle 显隐）
 // 2026-08-29：两栏布局——每个 group（全球/科技）一个 .attr-col，两列 grid 并排
+// 2026-08-29 用户再反馈：合并简化——顶级「全部 / 全球 / 科技」一行；col 内 L0/L1 不再重复"全部"子级（避免视觉噪音）
 function renderAttrFilter(items, groups) {
   const matcher = makeMatcher(items);
 
+  // ===== 顶级 L0：单独一行，承载「全部 / 全球 / 科技」3 颗 pill =====
+  // 「全部」= 清空筛选（pillId="all"，sources=REAL_SOURCE_IDS 仅用于显示总数）
+  // 「全球/科技」= 该群组全源（pillId=group.key）
+  const topPills = [];
+  topPills.push(renderPill("全部", REAL_SOURCE_IDS.slice(), null, matcher, { pillId: "all" }));
+  for (const g of groups) {
+    topPills.push(renderPill(g.label, g.sources, null, matcher, { pillId: g.key }));
+  }
+  const topRowHtml = '<div class="attr-row top-cat level-0">' +
+    '<div class="attr-row-label"></div>' +
+    '<div class="attr-row-pills">' + topPills.join("") + '</div>' +
+  '</div>';
+
   const colsHtml = groups.map(g => {
     const colRows = [];
-    // ===== 行 L0：根（"全球"/"科技"）=====
+    // ===== 行 L0：根（"全球"/"科技"）—— 仅含各 branch pill，不再重复"全部"子级（已上提至顶级）=====
     const rootPills = g.branches.map(br =>
       renderPill(br.label, br.sources, null, matcher, { pillId: g.key + "." + br.label }));
-    rootPills.unshift(renderPill("全部", g.sources, null, matcher, { pillId: g.key + ".全部", isAll: true }));
     colRows.push(renderRow(g.label, rootPills, { level: 0 }));
 
     // ===== 每个 branch 行 =====
@@ -1008,16 +1026,15 @@ function renderAttrFilter(items, groups) {
       }
       // 科技分支（sub_branches 模式）：每个 sub_branch 一行
       if (br.sub_branches) {
-        // 行 L1：branch 自身（"AI"）：全部 + 各 sub_branch pill
-        // 这个 row 始终展示（这是 L1 branch 自身的 pill 行），包含 "全部" 和子 branch pill
+        // 行 L1：branch 自身（"AI"）：各 sub_branch pill（"全部" 子级已上提至顶级，不再重复）
         const subPills = br.sub_branches.map(sb =>
           renderPill(sb.label, sb.sources, null, matcher, { pillId: brPath + "." + sb.label }));
         if (subPills.length) {
-          subPills.unshift(renderPill("全部", br.sources, null, matcher, { pillId: brPath + ".全部", isAll: true }));
           colRows.push(renderRow(br.label, subPills, { level: 1 }));
         }
         // 行 L2：每个 sub_branch 的 leaves（12 AI 品牌、HF Daily Papers）
         // 默认折叠；点 sub_branch pill（如「公司」「论文」）时展开；同时点父 pill「AI」也展开其下所有 sub_branch row
+        // 「全部」子级保留：作为 sub_branch 内部的快捷入口（"公司"行→[全部, OpenAI, ...]，"论文"行→[全部, HF Daily Papers]）
         br.sub_branches.forEach(sb => {
           if (sb.leaves && sb.leaves.length) {
             const sbPath = brPath + "." + sb.label;
@@ -1034,7 +1051,7 @@ function renderAttrFilter(items, groups) {
     return '<div class="attr-col" data-col-key="' + g.key + '">' + colRows.join("") + '</div>';
   }).join("");
 
-  return '<div class="attr-filter" id="attrfilter">__VIEW_SWITCHER__<div class="attr-rows">' +
+  return '<div class="attr-filter" id="attrfilter">__VIEW_SWITCHER__' + topRowHtml + '<div class="attr-rows">' +
     colsHtml + '</div></div>';
 }
 
@@ -1115,8 +1132,12 @@ function bindAttrFilter() {
     const sources = (b.dataset.sources || "").split(",").filter(Boolean);
     if (!sources.length || !pillId) return;
     const section = b.dataset.section || null;
-    // toggle：再次点击当前激活 pill → 取消
-    if (activeKey === pillId) {
+    // 顶级「全部」(pillId="all")：永远是清空筛选（activeSources=null），不应用任何 sources 过滤
+    if (pillId === "all") {
+      activeKey = "all";
+      activeSources = null;
+      activeSection = null;
+    } else if (activeKey === pillId) {
       activeKey = null;
       activeSources = null;
       activeSection = null;
@@ -1270,10 +1291,11 @@ function renderItemRow(i, num, dispName) {
     ? '<span class="time">' + escapeHtml(timeStr) + '</span>'
     : "";
 
-  // 缩略图（row1 末尾，可点击放大）：Reuters 等源 extra.image 存在时显示
+  // 缩略图（row1 末尾，可点击放大）：来源有 extra.image 时显示
+  // 2026-08-29 用户反馈「路透社图片不要放」—— Reuters 全量版统一不带 thumb（与简版去图保持一致）
   // onerror 隐藏失败图；点击在新窗口打开原图 = "单独放大"
   let thumbCell = "";
-  const imageUrl = (i.extra && (i.extra.image || i.extra.thumb)) || "";
+  const imageUrl = (i.source_id === "reuters") ? "" : ((i.extra && (i.extra.image || i.extra.thumb)) || "");
   if (imageUrl) {
     // 拼接 onerror 属性时不能用裸 'none'（JS 单引号字面量会提前闭合）。
     // 用 '\\u0027' 让 Python 字面值保留 \u0027，JS 引擎再翻译成 '。
