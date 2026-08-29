@@ -596,9 +596,9 @@ main { max-width: 100%; margin: 0; padding: 14px 20px 60px; }
 .attr-filter .view-switcher a { display: inline-block; padding: 5px 14px; border-radius: 6px; font-size: 12.5px; color: #475569; text-decoration: none; font-weight: 600; transition: all .14s ease; white-space: nowrap; line-height: 1.3; }
 .attr-filter .view-switcher a:hover:not(.active) { color: #ff7d39; background: #fff8f3; }
 .attr-filter .view-switcher a.active { background: linear-gradient(135deg, #ff7d39 0%, #ff9558 100%); color: #fff; box-shadow: 0 2px 5px rgba(255,125,57,.30); }
-.attr-rows { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 32px; align-items: start; }
-/* 2026-08-29：两栏布局——每个 group（全球/科技）一个 .attr-col，水平并排；左=全球（含 人民日报/Reuters sub-row），右=科技（含 AI/航天/综合 sub-row） */
-.attr-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+/* 2026-08-29：合并布局——「全球」「科技」两个 section 垂直堆叠在顶级行下方（移除两栏 grid） */
+.attr-section { margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #f1f5f9; }
+.attr-section:last-child { border-bottom: 0; margin-bottom: 0; padding-bottom: 0; }
 .attr-row { display: flex; align-items: flex-start; gap: 16px; min-width: 0; }
 /* 2026-08-28：过滤行默认折叠（HTML hidden 属性）—— 须显式排除 [hidden]，否则 .attr-row 的 flex 覆盖浏览器默认的 display:none */
 /* 用 !important 保证浏览器默认 [hidden] 行为生效，确保折叠行真正隐藏 */
@@ -978,8 +978,8 @@ function scanPDSections(items) {
 
 // ===== 渲染过滤器（含 3 级嵌套 + 动态 PD 板块行）=====
 // 2026-08-28：sub-row 默认折叠（hidden）；用户点击上方 branch pill 时才展开（toggle 显隐）
-// 2026-08-29：两栏布局——每个 group（全球/科技）一个 .attr-col，两列 grid 并排
-// 2026-08-29 用户再反馈：合并简化——顶级「全部 / 全球 / 科技」一行；col 内 L0/L1 不再重复"全部"子级（避免视觉噪音）
+// 2026-08-29：合并布局——「全球」「科技」两 section 垂直堆叠（移除两栏 grid）；每个 group 一个 .attr-section
+// 顶级「全部 / 全球 / 科技」一行；section 内 L0 仅含各 branch pill（不再重复"全部"子级，避免视觉噪音）
 function renderAttrFilter(items, groups) {
   const matcher = makeMatcher(items);
 
@@ -996,12 +996,12 @@ function renderAttrFilter(items, groups) {
     '<div class="attr-row-pills">' + topPills.join("") + '</div>' +
   '</div>';
 
-  const colsHtml = groups.map(g => {
-    const colRows = [];
+  const sectionsHtml = groups.map(g => {
+    const sectionRows = [];
     // ===== 行 L0：根（"全球"/"科技"）—— 仅含各 branch pill；label 置空（顶级「全球/科技」pill 已是分组锚定，避免重复）=====
     const rootPills = g.branches.map(br =>
       renderPill(br.label, br.sources, null, matcher, { pillId: g.key + "." + br.label }));
-    colRows.push(renderRow("", rootPills, { level: 0 }));
+    sectionRows.push(renderRow("", rootPills, { level: 0 }));
 
     // ===== 每个 branch 行 =====
     g.branches.forEach(br => {
@@ -1013,7 +1013,7 @@ function renderAttrFilter(items, groups) {
         if (secArr.length) {
           const pills = secArr.map(([s]) =>
             renderPill(s, [br.dynamic_sections.source_id], s, matcher, { pillId: brPath + "." + s }));
-          colRows.push(renderRow(br.label, pills, { level: 1, extraCls: "pd-block", collapsible: true, collapsePrefix: [brPath] }));
+          sectionRows.push(renderRow(br.label, pills, { level: 1, extraCls: "pd-block", collapsible: true, collapsePrefix: [brPath] }));
         }
         return;
       }
@@ -1022,7 +1022,7 @@ function renderAttrFilter(items, groups) {
       if (br.fixed_subsections) {
         const pills = br.fixed_subsections.map(sb =>
           renderPill(sb.label, br.sources, sb.section, matcher, { pillId: brPath + "." + sb.label }));
-        if (pills.length) colRows.push(renderRow(br.label, pills, { level: 1, collapsible: true, collapsePrefix: [brPath] }));
+        if (pills.length) sectionRows.push(renderRow(br.label, pills, { level: 1, collapsible: true, collapsePrefix: [brPath] }));
         return;
       }
       // 科技分支（sub_branches 模式）：每个 sub_branch 一行
@@ -1031,7 +1031,7 @@ function renderAttrFilter(items, groups) {
         const subPills = br.sub_branches.map(sb =>
           renderPill(sb.label, sb.sources, null, matcher, { pillId: brPath + "." + sb.label }));
         if (subPills.length) {
-          colRows.push(renderRow(br.label, subPills, { level: 1 }));
+          sectionRows.push(renderRow(br.label, subPills, { level: 1 }));
         }
         // 行 L2：每个 sub_branch 的 leaves（12 AI 品牌、HF Daily Papers）
         // 2026-08-29 用户反馈「默认展开部分 sub-row」：AI 的「公司」「论文」默认可见（节省 1 次点击）
@@ -1044,17 +1044,18 @@ function renderAttrFilter(items, groups) {
               renderPill(lf.label, lf.sources, null, matcher, { pillId: sbPath + "." + lf.label }));
             leafPills.unshift(renderPill("全部", sb.sources, null, matcher, { pillId: sbPath + ".全部", isAll: true }));
             // collapsible=false → 默认可见；点 sub_branch pill 仍可 toggle
-            colRows.push(renderRow(sb.label, leafPills, { level: 2, collapsible: false, collapsePrefix: [brPath, sbPath] }));
+            sectionRows.push(renderRow(sb.label, leafPills, { level: 2, collapsible: false, collapsePrefix: [brPath, sbPath] }));
           }
           // 没有 leaves 的分支（航天/SpaceX、综合/MIT）只占 L1 一行，不渲染额外 sub-row
         });
       }
     });
-    return '<div class="attr-col" data-col-key="' + g.key + '">' + colRows.join("") + '</div>';
+    // 2026-08-29 用户反馈：合并简化——右栏「AI/航天/综合」内容（科技 section）放入顶级「科技」pill；
+    // 同样处理全球 section；两 section 垂直堆叠在顶级行下方，移除两栏 grid
+    return '<div class="attr-section" data-section="' + g.key + '">' + sectionRows.join("") + '</div>';
   }).join("");
 
-  return '<div class="attr-filter" id="attrfilter">__VIEW_SWITCHER__' + topRowHtml + '<div class="attr-rows">' +
-    colsHtml + '</div></div>';
+  return '<div class="attr-filter" id="attrfilter">__VIEW_SWITCHER__' + topRowHtml + sectionsHtml + '</div>';
 }
 
 // ===== 视图切换器（点击 → 跳 simple.html 或回到 /）=====
