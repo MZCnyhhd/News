@@ -647,11 +647,12 @@ main { max-width: 100%; margin: 0; padding: 14px 20px 60px; }
 .attr-row.pd-block { padding-left: 14px; border-left: 2px solid #c0392b; }
 .attr-row.pd-block .attr-row-label { color: #c0392b; }
 .attr-row.pd-block .attr-row-pills .attr-pill { font-size: 12px; padding: 3px 10px; }
-/* 2026-08-29：顶级「全部 / 全球 / 科技」行——空 label 隐藏，与下方两栏网格分隔 */
+/* 2026-08-29：顶级「全部 / 全球 / 科技」行——与下方两栏网格分隔；label 留空（:empty 隐藏） */
 .attr-row.top-cat { padding-bottom: 10px; margin-bottom: 6px; border-bottom: 1px dashed #eef2f7; }
-.attr-row.top-cat .attr-row-label { display: none; }
 .attr-row.top-cat .attr-row-pills { padding-left: 0; }
 .attr-row.top-cat .attr-pill { font-size: 13.5px; padding: 5px 14px; }
+/* 2026-08-29：栏级「全球/科技」label 移除（顶级 pill 已是分组锚定）；空 label 整体隐藏 */
+.attr-row-label:empty { display: none; }
 /* Reuters World/Business 行：蓝色左边线突出"国际" */
 .attr-row.sub.level-1:not(.pd-block) { border-left-color: #e7ecf5; }
 /* 0 条源 → 直达源站链接（与 pill 同一形状，灰化） */
@@ -997,10 +998,10 @@ function renderAttrFilter(items, groups) {
 
   const colsHtml = groups.map(g => {
     const colRows = [];
-    // ===== 行 L0：根（"全球"/"科技"）—— 仅含各 branch pill，不再重复"全部"子级（已上提至顶级）=====
+    // ===== 行 L0：根（"全球"/"科技"）—— 仅含各 branch pill；label 置空（顶级「全球/科技」pill 已是分组锚定，避免重复）=====
     const rootPills = g.branches.map(br =>
       renderPill(br.label, br.sources, null, matcher, { pillId: g.key + "." + br.label }));
-    colRows.push(renderRow(g.label, rootPills, { level: 0 }));
+    colRows.push(renderRow("", rootPills, { level: 0 }));
 
     // ===== 每个 branch 行 =====
     g.branches.forEach(br => {
