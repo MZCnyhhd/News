@@ -1034,7 +1034,8 @@ function renderAttrFilter(items, groups) {
           colRows.push(renderRow(br.label, subPills, { level: 1 }));
         }
         // 行 L2：每个 sub_branch 的 leaves（12 AI 品牌、HF Daily Papers）
-        // 默认折叠；点 sub_branch pill（如「公司」「论文」）时展开；同时点父 pill「AI」也展开其下所有 sub_branch row
+        // 2026-08-29 用户反馈「默认展开部分 sub-row」：AI 的「公司」「论文」默认可见（节省 1 次点击）
+        // collapsePrefix 仍保留双值：点 AI 或 公司/论文 仍可 toggle 收起/展开
         // 「全部」子级保留：作为 sub_branch 内部的快捷入口（"公司"行→[全部, OpenAI, ...]，"论文"行→[全部, HF Daily Papers]）
         br.sub_branches.forEach(sb => {
           if (sb.leaves && sb.leaves.length) {
@@ -1042,8 +1043,8 @@ function renderAttrFilter(items, groups) {
             const leafPills = sb.leaves.map(lf =>
               renderPill(lf.label, lf.sources, null, matcher, { pillId: sbPath + "." + lf.label }));
             leafPills.unshift(renderPill("全部", sb.sources, null, matcher, { pillId: sbPath + ".全部", isAll: true }));
-            // collapsePrefix 双值：父 branch path + 自己 sub_branch path（点 AI 或 公司/论文 都展开这行）
-            colRows.push(renderRow(sb.label, leafPills, { level: 2, collapsible: true, collapsePrefix: [brPath, sbPath] }));
+            // collapsible=false → 默认可见；点 sub_branch pill 仍可 toggle
+            colRows.push(renderRow(sb.label, leafPills, { level: 2, collapsible: false, collapsePrefix: [brPath, sbPath] }));
           }
           // 没有 leaves 的分支（航天/SpaceX、综合/MIT）只占 L1 一行，不渲染额外 sub-row
         });
