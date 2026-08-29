@@ -593,8 +593,10 @@ main { max-width: 100%; margin: 0; padding: 14px 20px 60px; }
 .attr-filter .view-switcher a { display: inline-block; padding: 5px 14px; border-radius: 6px; font-size: 12.5px; color: #475569; text-decoration: none; font-weight: 600; transition: all .14s ease; white-space: nowrap; line-height: 1.3; }
 .attr-filter .view-switcher a:hover:not(.active) { color: #ff7d39; background: #fff8f3; }
 .attr-filter .view-switcher a.active { background: linear-gradient(135deg, #ff7d39 0%, #ff9558 100%); color: #fff; box-shadow: 0 2px 5px rgba(255,125,57,.30); }
-.attr-rows { display: flex; flex-direction: column; gap: 12px; }
-.attr-row { display: flex; align-items: flex-start; gap: 16px; }
+.attr-rows { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 32px; align-items: start; }
+/* 2026-08-29：两栏布局——每个 group（全球/科技）一个 .attr-col，水平并排；左=全球（含 人民日报/Reuters sub-row），右=科技（含 AI/航天/综合 sub-row） */
+.attr-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.attr-row { display: flex; align-items: flex-start; gap: 16px; min-width: 0; }
 /* 2026-08-28：过滤行默认折叠（HTML hidden 属性）—— 须显式排除 [hidden]，否则 .attr-row 的 flex 覆盖浏览器默认的 display:none */
 /* 用 !important 保证浏览器默认 [hidden] 行为生效，确保折叠行真正隐藏 */
 .attr-row[hidden] { display: none !important; }
@@ -967,17 +969,17 @@ function scanPDSections(items) {
 
 // ===== 渲染过滤器（含 3 级嵌套 + 动态 PD 板块行）=====
 // 2026-08-28：sub-row 默认折叠（hidden）；用户点击上方 branch pill 时才展开（toggle 显隐）
+// 2026-08-29：两栏布局——每个 group（全球/科技）一个 .attr-col，两列 grid 并排
 function renderAttrFilter(items, groups) {
   const matcher = makeMatcher(items);
-  const rowsHtml = [];
 
-  groups.forEach(g => {
+  const colsHtml = groups.map(g => {
+    const colRows = [];
     // ===== 行 L0：根（"全球"/"科技"）=====
-    const allC = matcher(g.sources, null);
     const rootPills = g.branches.map(br =>
       renderPill(br.label, br.sources, null, matcher, { pillId: g.key + "." + br.label }));
     rootPills.unshift(renderPill("全部", g.sources, null, matcher, { pillId: g.key + ".全部", isAll: true }));
-    rowsHtml.push(renderRow(g.label, rootPills, { level: 0 }));
+    colRows.push(renderRow(g.label, rootPills, { level: 0 }));
 
     // ===== 每个 branch 行 =====
     g.branches.forEach(br => {
@@ -989,7 +991,7 @@ function renderAttrFilter(items, groups) {
         if (secArr.length) {
           const pills = secArr.map(([s]) =>
             renderPill(s, [br.dynamic_sections.source_id], s, matcher, { pillId: brPath + "." + s }));
-          rowsHtml.push(renderRow(br.label, pills, { level: 1, extraCls: "pd-block", collapsible: true, collapsePrefix: [brPath] }));
+          colRows.push(renderRow(br.label, pills, { level: 1, extraCls: "pd-block", collapsible: true, collapsePrefix: [brPath] }));
         }
         return;
       }
@@ -998,19 +1000,18 @@ function renderAttrFilter(items, groups) {
       if (br.fixed_subsections) {
         const pills = br.fixed_subsections.map(sb =>
           renderPill(sb.label, br.sources, sb.section, matcher, { pillId: brPath + "." + sb.label }));
-        if (pills.length) rowsHtml.push(renderRow(br.label, pills, { level: 1, collapsible: true, collapsePrefix: [brPath] }));
+        if (pills.length) colRows.push(renderRow(br.label, pills, { level: 1, collapsible: true, collapsePrefix: [brPath] }));
         return;
       }
       // 科技分支（sub_branches 模式）：每个 sub_branch 一行
       if (br.sub_branches) {
         // 行 L1：branch 自身（"AI"）：全部 + 各 sub_branch pill
         // 这个 row 始终展示（这是 L1 branch 自身的 pill 行），包含 "全部" 和子 branch pill
-        const branchAllCnt = matcher(br.sources, null);
         const subPills = br.sub_branches.map(sb =>
           renderPill(sb.label, sb.sources, null, matcher, { pillId: brPath + "." + sb.label }));
         if (subPills.length) {
           subPills.unshift(renderPill("全部", br.sources, null, matcher, { pillId: brPath + ".全部", isAll: true }));
-          rowsHtml.push(renderRow(br.label, subPills, { level: 1 }));
+          colRows.push(renderRow(br.label, subPills, { level: 1 }));
         }
         // 行 L2：每个 sub_branch 的 leaves（12 AI 品牌、HF Daily Papers）
         // 默认折叠；点 sub_branch pill（如「公司」「论文」）时展开；同时点父 pill「AI」也展开其下所有 sub_branch row
@@ -1021,16 +1022,17 @@ function renderAttrFilter(items, groups) {
               renderPill(lf.label, lf.sources, null, matcher, { pillId: sbPath + "." + lf.label }));
             leafPills.unshift(renderPill("全部", sb.sources, null, matcher, { pillId: sbPath + ".全部", isAll: true }));
             // collapsePrefix 双值：父 branch path + 自己 sub_branch path（点 AI 或 公司/论文 都展开这行）
-            rowsHtml.push(renderRow(sb.label, leafPills, { level: 2, collapsible: true, collapsePrefix: [brPath, sbPath] }));
+            colRows.push(renderRow(sb.label, leafPills, { level: 2, collapsible: true, collapsePrefix: [brPath, sbPath] }));
           }
           // 没有 leaves 的分支（航天/SpaceX、综合/MIT）只占 L1 一行，不渲染额外 sub-row
         });
       }
     });
-  });
+    return '<div class="attr-col" data-col-key="' + g.key + '">' + colRows.join("") + '</div>';
+  }).join("");
 
   return '<div class="attr-filter" id="attrfilter">__VIEW_SWITCHER__<div class="attr-rows">' +
-    rowsHtml.join("") + '</div></div>';
+    colsHtml + '</div></div>';
 }
 
 // ===== 视图切换器（点击 → 跳 simple.html 或回到 /）=====
