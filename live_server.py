@@ -441,11 +441,11 @@ header h1 { font-size: 17px; font-weight: 700; }
 .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .tab .cnt { opacity: .75; font-size: 11.5px; margin-left: 3px; }
 main { max-width: 100%; margin: 0; padding: 14px 20px 60px; }
-/* ====== 列表项（2026-08-26 第三轮调整 / 2026-08-28 放宽 / 2026-08-29 再放宽）：top-row + 可选 summary =====
+/* ====== 列表项（2026-08-26 第三轮调整 / 2026-08-28 放宽 / 2026-08-29 撑满 main）：top-row + 可选 summary =====
    top：row1（meta + thumb 可选）+ title（同行右侧，flex:1）+ cmt-action
    row2：summary（可选，单行截断）
    row3：点评块
-   视觉：去掉外边框（border），仅底部 1px 分隔线；卡片居中 max-width：1240px（用户 2026-08-29 反馈「还是窄」）
+   视觉：去掉外边框（border），仅底部 1px 分隔线；卡片宽度 = main 宽 - 8px，与 attr-filter 卡片等宽（用户 2026-08-29 反馈「做成和上面一样长」）
 */
 .item {
   display: flex; flex-direction: column; gap: 4px;
@@ -454,8 +454,11 @@ main { max-width: 100%; margin: 0; padding: 14px 20px 60px; }
   border-bottom: 1px solid #f1f5f9;
   border-radius: 0;
   padding: 9px 12px 10px;
-  margin: 0 auto 2px;            /* 居中 + 紧凑底部间距 */
-  max-width: 1240px;             /* 卡片宽度：2026-08-29 用户再反馈「还是窄」，再加宽到 1240px */
+  margin: 0 0 2px;               /* 左对齐撑满 main，与上方 attr-filter 同宽 */
+  /* 2026-08-29 用户反馈「做成和上面一样长」—— 新闻列表宽度跟 attr-filter 一致，撑满 main 内容区 */
+  /* attr-filter 在 main 内 100% 撑满；item 也 100% + 左对齐，任意视宽下左右边缘完全对齐 */
+  width: 100%;
+  max-width: none;               /* 不限宽，确保各视宽都与上方 attr-filter 等宽 */
   transition: background .12s ease;
 }
 .item:hover { background: #fafbfd; }
