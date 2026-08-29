@@ -394,7 +394,7 @@ class Handler(BaseHTTPRequestHandler):
     _SIMPLE_CACHE: dict = {"ts": 0.0, "body": b""}
 
     def _serve_simple(self) -> None:
-        """Serve 简易版 HTML（人民日报要闻 / Reuters 全部去图 / 科技 6 品牌）。"""
+        """Serve 简易版 HTML（人民日报要闻 / Reuters 配图版 / 科技 6 品牌）。"""
         now = time.time()
         cached = self._SIMPLE_CACHE
         if now - cached["ts"] < 30 and cached["body"]:
@@ -2003,11 +2003,11 @@ def _render_simple_people(items: list[dict]) -> str:
 def _filter_simple(items: list[dict]) -> tuple[list[dict], list[dict], list[dict]]:
     """按 3 块精要切分条目：
     - 人民日报 仅 要闻版面（section 以 "要闻" 结尾）
-    - Reuters 全部（2026-08-28 改为不过滤图片，sec2 渲染时也不带 thumb：用户要求 2️⃣）
+    - Reuters 仅带 extra.image 的（2026-08-29 用户要求：精简版只收集带图片的新闻，渲染仍不带图）
     - 科技 仅 SIMPLE_TECH_IDS 中的 6 大品牌
     """
     sec1: list[dict] = []  # 人民日报 要闻
-    sec2: list[dict] = []  # Reuters 全部（不过滤有图）
+    sec2: list[dict] = []  # Reuters 仅带图（extra.image 存在性过滤）
     sec3: list[dict] = []  # 科技 6 品牌
     for it in items:
         sid = it.get("source_id", "")
@@ -2018,7 +2018,9 @@ def _filter_simple(items: list[dict]) -> tuple[list[dict], list[dict], list[dict
             if sec_name.endswith("要闻") or sec_name == "要闻":
                 sec1.append(it)
         elif sid == "reuters":
-            sec2.append(it)
+            # 2026-08-29：精简版只收带图片的（extra.image 存在）；scraper 不变（全量仍收所有 World/Business）
+            if extra.get("image"):
+                sec2.append(it)
         elif sid in SIMPLE_TECH_IDS:
             sec3.append(it)
     # 按发布时间倒序
@@ -2028,8 +2030,9 @@ def _filter_simple(items: list[dict]) -> tuple[list[dict], list[dict], list[dict
 
 
 def build_simple_html(items: list[dict], day_str: str) -> str:
-    """生成简易版 HTML：3 块精要（人民日报要闻 / Reuters 全部去图 / 科技 6 品牌）。
-    2026-08-28：Reuters section 不再带图片（with_thumb=False，简版更紧凑）。"""
+    """生成简易版 HTML：3 块精要（人民日报要闻 / Reuters 配图版 / 科技 6 品牌）。
+    2026-08-28：Reuters section 不再带图片（with_thumb=False，简版更紧凑）。
+    2026-08-29：Reuters 仅收带 extra.image 的（仅显示配图新闻，渲染仍不带图）。"""
     sec1, sec2, sec3 = _filter_simple(items)
     return (
         SIMPLE_HTML
@@ -2063,11 +2066,11 @@ def build_simple(output_path: str) -> int:
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html, encoding="utf-8")
-    logger.info("简易版已生成: %s（人民日报要闻=%d / Reuters全部去图=%d / 科技6品牌=%d）",
+    logger.info("简易版已生成: %s（人民日报要闻=%d / Reuters配图版=%d / 科技6品牌=%d）",
                 output_path, len(sec1), len(sec2), len(sec3))
     print(f"\n✓ 简易版已生成: {output_path}")
     print(f"  - 人民日报·要闻：{len(sec1)} 条")
-    print(f"  - Reuters·全部（无图）：{len(sec2)} 条")
+    print(f"  - Reuters·配图版（仅收带 extra.image 的，渲染仍不带图）：{len(sec2)} 条")
     print(f"  - 科技·6 大品牌：{len(sec3)} 条\n")
     return 0
 
