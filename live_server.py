@@ -603,6 +603,8 @@ main { max-width: 100%; margin: 0; padding: 14px 20px 60px; }
 /* 2026-08-28：过滤行默认折叠（HTML hidden 属性）—— 须显式排除 [hidden]，否则 .attr-row 的 flex 覆盖浏览器默认的 display:none */
 /* 用 !important 保证浏览器默认 [hidden] 行为生效，确保折叠行真正隐藏 */
 .attr-row[hidden] { display: none !important; }
+/* 2026-08-29 逐级 drill-down：section 容器默认折叠（hidden），需显式排除 [hidden] */
+.attr-section[hidden] { display: none !important; }
 .attr-row-label { flex: 0 0 76px; padding-top: 5px; font-size: 13px; font-weight: 700; color: #1e293b; text-align: right; letter-spacing: .2px; }
 .attr-row-pills { flex: 1; display: flex; flex-wrap: wrap; gap: 6px 6px; }
 .attr-pill {
@@ -980,6 +982,8 @@ function scanPDSections(items) {
 // 2026-08-28：sub-row 默认折叠（hidden）；用户点击上方 branch pill 时才展开（toggle 显隐）
 // 2026-08-29：合并布局——「全球」「科技」两 section 垂直堆叠（移除两栏 grid）；每个 group 一个 .attr-section
 // 顶级「全部 / 全球 / 科技」一行；section 内 L0 仅含各 branch pill（不再重复"全部"子级，避免视觉噪音）
+// 2026-08-29 用户再反馈：逐级 drill-down 手风琴——两个 section 默认折叠（hidden），点顶级「全球」「科技」才展开其 L0；
+//   点 AI→展开「公司」「论文」L1；点「公司」→展开 12 品牌 L2；点「论文」→展开 HF；点「航天」→展开 SpaceX；点「综合」→展开 MIT
 function renderAttrFilter(items, groups) {
   const matcher = makeMatcher(items);
 
@@ -987,9 +991,9 @@ function renderAttrFilter(items, groups) {
   // 「全部」= 清空筛选（pillId="all"，sources=REAL_SOURCE_IDS 仅用于显示总数）
   // 「全球/科技」= 该群组全源（pillId=group.key）
   const topPills = [];
-  topPills.push(renderPill("全部", REAL_SOURCE_IDS.slice(), null, matcher, { pillId: "all" }));
+  topPills.push(renderPill("全部", REAL_SOURCE_IDS.slice(), null, matcher, { pillId: "all", alwaysShow: true }));
   for (const g of groups) {
-    topPills.push(renderPill(g.label, g.sources, null, matcher, { pillId: g.key }));
+    topPills.push(renderPill(g.label, g.sources, null, matcher, { pillId: g.key, alwaysShow: true }));
   }
   const topRowHtml = '<div class="attr-row top-cat level-0">' +
     '<div class="attr-row-label"></div>' +
@@ -999,8 +1003,9 @@ function renderAttrFilter(items, groups) {
   const sectionsHtml = groups.map(g => {
     const sectionRows = [];
     // ===== 行 L0：根（"全球"/"科技"）—— 仅含各 branch pill；label 置空（顶级「全球/科技」pill 已是分组锚定，避免重复）=====
+    // 2026-08-29 逐级 drill-down：branch 父 pill（人民日报/Reuters/AI/航天/综合）即使聚合 0 条也必须可点（展开子级），故 alwaysShow
     const rootPills = g.branches.map(br =>
-      renderPill(br.label, br.sources, null, matcher, { pillId: g.key + "." + br.label }));
+      renderPill(br.label, br.sources, null, matcher, { pillId: g.key + "." + br.label, alwaysShow: true }));
     sectionRows.push(renderRow("", rootPills, { level: 0 }));
 
     // ===== 每个 branch 行 =====
@@ -1028,23 +1033,25 @@ function renderAttrFilter(items, groups) {
       // 科技分支（sub_branches 模式）：每个 sub_branch 一行
       if (br.sub_branches) {
         // 行 L1：branch 自身（"AI"）：各 sub_branch pill（"全部" 子级已上提至顶级，不再重复）
+        // 有 leaves 的 sub_branch（公司/论文）是 branch 父 pill，必须可点展开 → alwaysShow；
+        // 无 leaves 的（SpaceX/MIT）是叶子，保持 0 条→外链兜底
         const subPills = br.sub_branches.map(sb =>
-          renderPill(sb.label, sb.sources, null, matcher, { pillId: brPath + "." + sb.label }));
+          renderPill(sb.label, sb.sources, null, matcher, { pillId: brPath + "." + sb.label, alwaysShow: !!(sb.leaves && sb.leaves.length) }));
         if (subPills.length) {
-          sectionRows.push(renderRow(br.label, subPills, { level: 1 }));
+          // 2026-08-29 用户再反馈：逐级 drill-down——L1 sub-branch 行（公司/论文/SpaceX/MIT）默认折叠，点父 pill（AI/航天/综合）才展开
+          sectionRows.push(renderRow(br.label, subPills, { level: 1, collapsible: true, collapsePrefix: [brPath] }));
         }
         // 行 L2：每个 sub_branch 的 leaves（12 AI 品牌、HF Daily Papers）
-        // 2026-08-29 用户反馈「默认展开部分 sub-row」：AI 的「公司」「论文」默认可见（节省 1 次点击）
-        // collapsePrefix 仍保留双值：点 AI 或 公司/论文 仍可 toggle 收起/展开
+        // 2026-08-29 用户再反馈：逐级 drill-down——品牌行（公司/论文）默认折叠，点「公司」/「论文」才展开
         // 「全部」子级保留：作为 sub_branch 内部的快捷入口（"公司"行→[全部, OpenAI, ...]，"论文"行→[全部, HF Daily Papers]）
         br.sub_branches.forEach(sb => {
           if (sb.leaves && sb.leaves.length) {
             const sbPath = brPath + "." + sb.label;
             const leafPills = sb.leaves.map(lf =>
               renderPill(lf.label, lf.sources, null, matcher, { pillId: sbPath + "." + lf.label }));
-            leafPills.unshift(renderPill("全部", sb.sources, null, matcher, { pillId: sbPath + ".全部", isAll: true }));
-            // collapsible=false → 默认可见；点 sub_branch pill 仍可 toggle
-            sectionRows.push(renderRow(sb.label, leafPills, { level: 2, collapsible: false, collapsePrefix: [brPath, sbPath] }));
+            leafPills.unshift(renderPill("全部", sb.sources, null, matcher, { pillId: sbPath + ".全部", isAll: true, alwaysShow: true }));
+            // collapsible=true → 默认折叠；点「公司」(tech.AI.公司) 展开品牌行，点「论文」(tech.AI.论文) 展开 HF
+            sectionRows.push(renderRow(sb.label, leafPills, { level: 2, collapsible: true, collapsePrefix: [sbPath] }));
           }
           // 没有 leaves 的分支（航天/SpaceX、综合/MIT）只占 L1 一行，不渲染额外 sub-row
         });
@@ -1052,7 +1059,8 @@ function renderAttrFilter(items, groups) {
     });
     // 2026-08-29 用户反馈：合并简化——右栏「AI/航天/综合」内容（科技 section）放入顶级「科技」pill；
     // 同样处理全球 section；两 section 垂直堆叠在顶级行下方，移除两栏 grid
-    return '<div class="attr-section" data-section="' + g.key + '">' + sectionRows.join("") + '</div>';
+    // 2026-08-29 用户再反馈：逐级 drill-down——每个 section 默认折叠（hidden），点顶级「全球」「科技」pill 才展开
+    return '<div class="attr-section" data-section="' + g.key + '" data-collapse-prefix="' + g.key + '" hidden>' + sectionRows.join("") + '</div>';
   }).join("");
 
   return '<div class="attr-filter" id="attrfilter">__VIEW_SWITCHER__' + topRowHtml + sectionsHtml + '</div>';
@@ -1118,10 +1126,22 @@ function syncAttrFilterActive() {
 function toggleCollapseRows(pillId) {
   const af = document.getElementById("attrfilter");
   if (!af || !pillId) return;
-  af.querySelectorAll(".attr-row[data-collapse-prefix]").forEach(el => {
+  af.querySelectorAll(".attr-row[data-collapse-prefix], .attr-section[data-collapse-prefix]").forEach(el => {
     const cp = (el.dataset.collapsePrefix || "").split(",").map(s => s.trim()).filter(Boolean);
     if (cp.indexOf(pillId) >= 0) el.hidden = !el.hidden;
   });
+}
+
+// 逐级 drill-down：点击深层 pill 时，把其所有祖先前缀对应的 section/row 一并展开（仅显示，不 toggle）
+// 例如点 tech.AI.公司.OpenAI → 确保 tech section、tech.AI 行（公司/论文）、tech.AI.公司 行（品牌）都已显示
+function autoExpandAncestors(pillId) {
+  const af = document.getElementById("attrfilter");
+  if (!af || !pillId) return;
+  const parts = pillId.split(".");
+  for (let i = 1; i < parts.length; i++) {
+    const prefix = parts.slice(0, i).join(".");
+    af.querySelectorAll('[data-collapse-prefix="' + prefix + '"]').forEach(el => { el.hidden = false; });
+  }
 }
 
 // ===== 绑定 pill 点击：toggle 选中 / 取消；切完 active 态不重建 DOM =====
@@ -1151,6 +1171,8 @@ function bindAttrFilter() {
     }
     // 0) toggle 当前 pill 对应的 collapse-row 显隐（用户 2026-08-28 反馈：默认不展开分支，点 pill 才展开）
     toggleCollapseRows(pillId);
+    // 0.5) 逐级 drill-down：把深层 pill 的祖先路径（section/row）一并展开，保证点击任何层级都能看到完整子树
+    autoExpandAncestors(pillId);
     // 1) 增量同步 pill active 态（不重建 attr-filter DOM）
     syncAttrFilterActive();
     // 2) 重建 items 区（过滤变了，列表要刷新）
