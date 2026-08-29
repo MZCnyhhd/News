@@ -394,7 +394,7 @@ class Handler(BaseHTTPRequestHandler):
     _SIMPLE_CACHE: dict = {"ts": 0.0, "body": b""}
 
     def _serve_simple(self) -> None:
-        """Serve 简易版 HTML（人民日报要闻 / Reuters 有图 / 科技 6 品牌）。"""
+        """Serve 简易版 HTML（人民日报要闻 / Reuters 全部去图 / 科技 6 品牌）。"""
         now = time.time()
         cached = self._SIMPLE_CACHE
         if now - cached["ts"] < 30 and cached["body"]:
@@ -441,11 +441,11 @@ header h1 { font-size: 17px; font-weight: 700; }
 .tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
 .tab .cnt { opacity: .75; font-size: 11.5px; margin-left: 3px; }
 main { max-width: 100%; margin: 0; padding: 14px 20px 60px; }
-/* ====== 列表项（2026-08-26 第三轮调整）：top-row + 可选 summary =====
+/* ====== 列表项（2026-08-26 第三轮调整 / 2026-08-28 放宽 / 2026-08-29 再放宽）：top-row + 可选 summary =====
    top：row1（meta + thumb 可选）+ title（同行右侧，flex:1）+ cmt-action
    row2：summary（可选，单行截断）
    row3：点评块
-   视觉：去掉外边框（border），仅底部 1px 分隔线；卡片居中 max-width：720px
+   视觉：去掉外边框（border），仅底部 1px 分隔线；卡片居中 max-width：1240px（用户 2026-08-29 反馈「还是窄」）
 */
 .item {
   display: flex; flex-direction: column; gap: 4px;
@@ -455,7 +455,7 @@ main { max-width: 100%; margin: 0; padding: 14px 20px 60px; }
   border-radius: 0;
   padding: 9px 12px 10px;
   margin: 0 auto 2px;            /* 居中 + 紧凑底部间距 */
-  max-width: 720px;              /* 卡片宽度收紧 */
+  max-width: 1240px;             /* 卡片宽度：2026-08-29 用户再反馈「还是窄」，再加宽到 1240px */
   transition: background .12s ease;
 }
 .item:hover { background: #fafbfd; }
@@ -595,6 +595,9 @@ main { max-width: 100%; margin: 0; padding: 14px 20px 60px; }
 .attr-filter .view-switcher a.active { background: linear-gradient(135deg, #ff7d39 0%, #ff9558 100%); color: #fff; box-shadow: 0 2px 5px rgba(255,125,57,.30); }
 .attr-rows { display: flex; flex-direction: column; gap: 12px; }
 .attr-row { display: flex; align-items: flex-start; gap: 16px; }
+/* 2026-08-28：过滤行默认折叠（HTML hidden 属性）—— 须显式排除 [hidden]，否则 .attr-row 的 flex 覆盖浏览器默认的 display:none */
+/* 用 !important 保证浏览器默认 [hidden] 行为生效，确保折叠行真正隐藏 */
+.attr-row[hidden] { display: none !important; }
 .attr-row-label { flex: 0 0 76px; padding-top: 5px; font-size: 13px; font-weight: 700; color: #1e293b; text-align: right; letter-spacing: .2px; }
 .attr-row-pills { flex: 1; display: flex; flex-wrap: wrap; gap: 6px 6px; }
 .attr-pill {
@@ -919,6 +922,8 @@ function renderPill(label, sources, section, matcher, opts) {
 }
 
 // 渲染一行：属性名 + pills；level 控制缩进（0=顶级 1=二级 2=三级）
+// collapsible=true 时给 row 加 hidden + data-collapse-prefix（点击对应 pill 才展开）
+// collapsePrefix 支持字符串或数组（数组用 "," 拼成多值——支持多个 pillId 触发显示/隐藏）
 function renderRow(label, pills, opts) {
   opts = opts || {};
   const level = opts.level || 0;
@@ -926,7 +931,13 @@ function renderRow(label, pills, opts) {
   const extraCls = opts.extraCls || "";
   // level 2 加更深缩进（科技公司品牌的 12 颗 pill 行）
   const depthCls = level >= 2 ? " deep" : "";
-  return '<div class="attr-row' + (isSub ? ' sub' : '') + ' level-' + level + depthCls + ' ' + extraCls + '">' +
+  let prefixAttr = "";
+  if (opts.collapsePrefix) {
+    const arr = Array.isArray(opts.collapsePrefix) ? opts.collapsePrefix : [opts.collapsePrefix];
+    if (arr.length) prefixAttr = ' data-collapse-prefix="' + escapeAttr(arr.join(",")) + '"';
+  }
+  const hiddenAttr = opts.collapsible ? " hidden" : "";
+  return '<div class="attr-row' + (isSub ? ' sub' : '') + ' level-' + level + depthCls + ' ' + extraCls + '"' + prefixAttr + hiddenAttr + '>' +
     '<div class="attr-row-label">' + escapeHtml(label) + '</div>' +
     '<div class="attr-row-pills">' + pills.join("") + '</div>' +
   '</div>';
@@ -955,6 +966,7 @@ function scanPDSections(items) {
 }
 
 // ===== 渲染过滤器（含 3 级嵌套 + 动态 PD 板块行）=====
+// 2026-08-28：sub-row 默认折叠（hidden）；用户点击上方 branch pill 时才展开（toggle 显隐）
 function renderAttrFilter(items, groups) {
   const matcher = makeMatcher(items);
   const rowsHtml = [];
@@ -971,25 +983,28 @@ function renderAttrFilter(items, groups) {
     g.branches.forEach(br => {
       const brPath = g.key + "." + br.label;
       // 人民日报分支：动态板块 sub-row（每次 items 更新时由 updateAttrFilterCounts 局部重建）
+      // 默认折叠；点击分支 pill「人民日报」时展开（collapsePrefix=['global.人民日报']）
       if (br.dynamic_sections) {
         const secArr = scanPDSections(items);
         if (secArr.length) {
           const pills = secArr.map(([s]) =>
             renderPill(s, [br.dynamic_sections.source_id], s, matcher, { pillId: brPath + "." + s }));
-          rowsHtml.push(renderRow(br.label, pills, { level: 1, extraCls: "pd-block" }));
+          rowsHtml.push(renderRow(br.label, pills, { level: 1, extraCls: "pd-block", collapsible: true, collapsePrefix: [brPath] }));
         }
         return;
       }
       // Reuters 分支：World / Business sub-row（板块固定，无需增量更新）
+      // 默认折叠；点击「Reuters 路透社」pill 时展开
       if (br.fixed_subsections) {
         const pills = br.fixed_subsections.map(sb =>
           renderPill(sb.label, br.sources, sb.section, matcher, { pillId: brPath + "." + sb.label }));
-        if (pills.length) rowsHtml.push(renderRow(br.label, pills, { level: 1 }));
+        if (pills.length) rowsHtml.push(renderRow(br.label, pills, { level: 1, collapsible: true, collapsePrefix: [brPath] }));
         return;
       }
       // 科技分支（sub_branches 模式）：每个 sub_branch 一行
       if (br.sub_branches) {
         // 行 L1：branch 自身（"AI"）：全部 + 各 sub_branch pill
+        // 这个 row 始终展示（这是 L1 branch 自身的 pill 行），包含 "全部" 和子 branch pill
         const branchAllCnt = matcher(br.sources, null);
         const subPills = br.sub_branches.map(sb =>
           renderPill(sb.label, sb.sources, null, matcher, { pillId: brPath + "." + sb.label }));
@@ -998,14 +1013,17 @@ function renderAttrFilter(items, groups) {
           rowsHtml.push(renderRow(br.label, subPills, { level: 1 }));
         }
         // 行 L2：每个 sub_branch 的 leaves（12 AI 品牌、HF Daily Papers）
+        // 默认折叠；点 sub_branch pill（如「公司」「论文」）时展开；同时点父 pill「AI」也展开其下所有 sub_branch row
         br.sub_branches.forEach(sb => {
           if (sb.leaves && sb.leaves.length) {
             const sbPath = brPath + "." + sb.label;
             const leafPills = sb.leaves.map(lf =>
               renderPill(lf.label, lf.sources, null, matcher, { pillId: sbPath + "." + lf.label }));
             leafPills.unshift(renderPill("全部", sb.sources, null, matcher, { pillId: sbPath + ".全部", isAll: true }));
-            rowsHtml.push(renderRow(sb.label, leafPills, { level: 2 }));
+            // collapsePrefix 双值：父 branch path + 自己 sub_branch path（点 AI 或 公司/论文 都展开这行）
+            rowsHtml.push(renderRow(sb.label, leafPills, { level: 2, collapsible: true, collapsePrefix: [brPath, sbPath] }));
           }
+          // 没有 leaves 的分支（航天/SpaceX、综合/MIT）只占 L1 一行，不渲染额外 sub-row
         });
       }
     });
@@ -1070,6 +1088,17 @@ function syncAttrFilterActive() {
   });
 }
 
+// 切换指定 prefix 的所有 collapse-row 显隐状态（默认折叠 → 点 pill 展开 / 再点收起）
+// 一个 row 的 data-collapse-prefix 可能是 "a,b,c" 多值，匹配其中任一即触发 toggle
+function toggleCollapseRows(pillId) {
+  const af = document.getElementById("attrfilter");
+  if (!af || !pillId) return;
+  af.querySelectorAll(".attr-row[data-collapse-prefix]").forEach(el => {
+    const cp = (el.dataset.collapsePrefix || "").split(",").map(s => s.trim()).filter(Boolean);
+    if (cp.indexOf(pillId) >= 0) el.hidden = !el.hidden;
+  });
+}
+
 // ===== 绑定 pill 点击：toggle 选中 / 取消；切完 active 态不重建 DOM =====
 function bindAttrFilter() {
   const root = document.getElementById("attrfilter");
@@ -1091,6 +1120,8 @@ function bindAttrFilter() {
       activeSources = sources;
       activeSection = section;
     }
+    // 0) toggle 当前 pill 对应的 collapse-row 显隐（用户 2026-08-28 反馈：默认不展开分支，点 pill 才展开）
+    toggleCollapseRows(pillId);
     // 1) 增量同步 pill active 态（不重建 attr-filter DOM）
     syncAttrFilterActive();
     // 2) 重建 items 区（过滤变了，列表要刷新）
@@ -1828,7 +1859,7 @@ footer a { color: #94a3b8; }
 </section>
 
 <section>
-  <h2>Reuters · 有图片 <span class="tag">world / business</span><span class="count">__N2__ 条</span></h2>
+  <h2>Reuters 路透社 <span class="tag">world / business</span><span class="count">__N2__ 条</span></h2>
   __SEC2__
 </section>
 
@@ -1853,7 +1884,9 @@ def _escape(s) -> str:
 
 
 def _render_simple_section(items: list[dict], *, with_thumb: bool = False, show_sec: bool = True) -> str:
-    """渲染简易版单个分区为 <ol><li>...</li></ol>；空集合返回提示。"""
+    """渲染简易版单个分区为 <ol><li>...</li></ol>；空集合返回提示。
+    2026-08-28 调整：li 内顺序 = thumb? + time + src + sec + <a>title</a> + note，
+    与全量版「时间 媒体 板块 标题」保持一致（标题由最左移到最后）。"""
     if not items:
         return '<div class="empty-msg">今日暂无收录</div>'
     lis: list[str] = []
@@ -1878,11 +1911,11 @@ def _render_simple_section(items: list[dict], *, with_thumb: bool = False, show_
             note_html = f'<div class="my-note"><span class="note-label">我的点评</span>{note}</div>'
         lis.append(
             '<li>'
-            f'<a href="{url}" target="_blank" rel="noopener">{title}</a>'
             f'{thumb_html}'
             f'<span class="time">{time_str}</span>'
             f'<span class="src">{src}</span>'
             f'{sec_html}'
+            f'<a href="{url}" target="_blank" rel="noopener">{title}</a>'
             f'{note_html}'
             '</li>'
         )
@@ -1943,11 +1976,11 @@ def _render_simple_people(items: list[dict]) -> str:
 def _filter_simple(items: list[dict]) -> tuple[list[dict], list[dict], list[dict]]:
     """按 3 块精要切分条目：
     - 人民日报 仅 要闻版面（section 以 "要闻" 结尾）
-    - Reuters 仅带图片（extra.image 存在）
+    - Reuters 全部（2026-08-28 改为不过滤图片，sec2 渲染时也不带 thumb：用户要求 2️⃣）
     - 科技 仅 SIMPLE_TECH_IDS 中的 6 大品牌
     """
     sec1: list[dict] = []  # 人民日报 要闻
-    sec2: list[dict] = []  # Reuters 有图
+    sec2: list[dict] = []  # Reuters 全部（不过滤有图）
     sec3: list[dict] = []  # 科技 6 品牌
     for it in items:
         sid = it.get("source_id", "")
@@ -1958,8 +1991,7 @@ def _filter_simple(items: list[dict]) -> tuple[list[dict], list[dict], list[dict
             if sec_name.endswith("要闻") or sec_name == "要闻":
                 sec1.append(it)
         elif sid == "reuters":
-            if extra.get("image"):
-                sec2.append(it)
+            sec2.append(it)
         elif sid in SIMPLE_TECH_IDS:
             sec3.append(it)
     # 按发布时间倒序
@@ -1969,7 +2001,8 @@ def _filter_simple(items: list[dict]) -> tuple[list[dict], list[dict], list[dict
 
 
 def build_simple_html(items: list[dict], day_str: str) -> str:
-    """生成简易版 HTML：3 块精要（人民日报要闻 / Reuters有图 / 科技6品牌）。"""
+    """生成简易版 HTML：3 块精要（人民日报要闻 / Reuters 全部去图 / 科技 6 品牌）。
+    2026-08-28：Reuters section 不再带图片（with_thumb=False，简版更紧凑）。"""
     sec1, sec2, sec3 = _filter_simple(items)
     return (
         SIMPLE_HTML
@@ -1978,7 +2011,7 @@ def build_simple_html(items: list[dict], day_str: str) -> str:
         .replace("__N2__", str(len(sec2)))
         .replace("__N3__", str(len(sec3)))
         .replace("__SEC1__", _render_simple_people(sec1))
-        .replace("__SEC2__", _render_simple_section(sec2, with_thumb=True))
+        .replace("__SEC2__", _render_simple_section(sec2, with_thumb=False))
         .replace("__SEC3__", _render_simple_tech(sec3))
         .replace("__VIEW_SWITCHER__",
                  _view_switcher_html("simple", full_href="./", simple_href="#"))
@@ -2003,11 +2036,11 @@ def build_simple(output_path: str) -> int:
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html, encoding="utf-8")
-    logger.info("简易版已生成: %s（人民日报要闻=%d / Reuters有图=%d / 科技6品牌=%d）",
+    logger.info("简易版已生成: %s（人民日报要闻=%d / Reuters全部去图=%d / 科技6品牌=%d）",
                 output_path, len(sec1), len(sec2), len(sec3))
     print(f"\n✓ 简易版已生成: {output_path}")
     print(f"  - 人民日报·要闻：{len(sec1)} 条")
-    print(f"  - Reuters·有图片：{len(sec2)} 条")
+    print(f"  - Reuters·全部（无图）：{len(sec2)} 条")
     print(f"  - 科技·6 大品牌：{len(sec3)} 条\n")
     return 0
 
